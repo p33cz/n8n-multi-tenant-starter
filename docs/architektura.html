@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<title>Architektura – dvouvrstvý model</title>
+<style>
+  :root{
+    --bg:#0f1115;
+    --panel:#161922;
+    --panel-2:#1c202b;
+    --line:#2a2f3d;
+    --accent:#5ec3a6;
+    --accent-2:#e0a85e;
+    --accent-3:#e07a5e;
+    --accent-4:#7b93e0;
+    --text:#e8e9ee;
+    --muted:#8b90a0;
+    --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--mono);
+    padding:28px 16px 60px;
+  }
+  h1{
+    font-size:15px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--muted);
+    text-align:center;
+    margin:0 0 4px;
+    font-weight:500;
+  }
+  h1 span{color:var(--accent);}
+  .sub{
+    text-align:center;
+    color:var(--muted);
+    font-size:12px;
+    margin-bottom:28px;
+  }
+  .stage{
+    max-width:1000px;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .row{
+    display:flex;
+    gap:16px;
+    justify-content:center;
+    flex-wrap:wrap;
+  }
+  .client-label{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:8px 14px;
+    font-size:11.5px;
+    text-align:center;
+    color:var(--muted);
+    min-width:150px;
+  }
+  .client-label b{color:var(--text);display:block;font-size:12.5px;margin-bottom:2px;}
+  .arrow-down{
+    text-align:center;
+    color:var(--line);
+    font-size:16px;
+    line-height:1;
+  }
+  .vps{
+    border:1px dashed var(--line);
+    border-radius:14px;
+    padding:22px;
+    position:relative;
+  }
+  .vps-label{
+    position:absolute;
+    top:-11px;
+    left:20px;
+    background:var(--bg);
+    padding:0 8px;
+    font-size:11px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+  .tier{
+    border-radius:10px;
+    padding:16px;
+    margin-bottom:14px;
+  }
+  .tier:last-child{margin-bottom:0;}
+  .tier-label{
+    font-size:11px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:10px;
+  }
+  .tier.apache{background:rgba(94,195,166,.06); border:1px solid rgba(94,195,166,.25);}
+  .tier.apache .tier-label{color:var(--accent);}
+  .tier.ops{background:rgba(123,147,224,.07); border:1px solid rgba(123,147,224,.3);}
+  .tier.ops .tier-label{color:var(--accent-4);}
+  .tier.db{background:rgba(139,144,160,.06); border:1px solid rgba(139,144,160,.25);}
+  .tier.db .tier-label{color:var(--muted);}
+
+  .pairs{display:flex; gap:16px; flex-wrap:wrap; justify-content:center;}
+  .pair{
+    border:1px solid rgba(224,168,94,.35);
+    border-radius:10px;
+    padding:12px;
+    min-width:220px;
+    background:rgba(224,168,94,.04);
+  }
+  .pair-title{
+    font-size:11px; color:var(--accent-2); letter-spacing:.05em;
+    text-transform:uppercase; margin-bottom:8px; text-align:center;
+  }
+  .pair-boxes{display:flex; flex-direction:column; gap:8px;}
+  .box{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:7px;
+    padding:9px 11px;
+    font-size:11px;
+  }
+  .box b{display:block; color:var(--text); font-size:12px; margin-bottom:3px;}
+  .box.n8n{border-color:rgba(224,168,94,.4);}
+  .box.n8n b{color:var(--accent-2);}
+  .box.cc{border-color:rgba(224,122,94,.4);}
+  .box.cc b{color:var(--accent-3);}
+  .box .note{color:var(--muted); font-size:10px;}
+  .pair-net{
+    text-align:center; font-size:9.5px; color:var(--muted);
+    margin-top:6px; letter-spacing:.03em;
+  }
+  .link{
+    text-align:center; font-size:10px; color:var(--muted);
+    margin:2px 0;
+  }
+
+  .cards{display:flex; gap:12px; flex-wrap:wrap; justify-content:center;}
+  .card{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:11.5px;
+    min-width:150px;
+    color:var(--muted);
+  }
+  .card b{display:block; color:var(--text); font-size:12.5px; margin-bottom:3px;}
+
+  .ops-row{display:flex; gap:14px; flex-wrap:wrap; align-items:stretch;}
+  .ops-main{
+    flex:1;
+    min-width:220px;
+    background:var(--panel-2);
+    border:1px solid rgba(123,147,224,.4);
+    border-radius:8px;
+    padding:12px 14px;
+    font-size:12px;
+  }
+  .ops-main b{display:block; color:var(--accent-4); font-size:13px; margin-bottom:6px;}
+  .ops-main ul{margin:0; padding-left:16px; color:var(--muted); font-size:11px; line-height:1.7;}
+  .ops-notes{display:flex; flex-direction:column; gap:8px; justify-content:center; min-width:170px;}
+  .pill{
+    background:rgba(123,147,224,.1);
+    border:1px solid rgba(123,147,224,.25);
+    border-radius:20px;
+    padding:6px 12px;
+    font-size:10.5px;
+    color:var(--muted);
+    text-align:center;
+  }
+
+  .legend{
+    display:flex; gap:18px; justify-content:center; flex-wrap:wrap;
+    margin-top:26px; font-size:11px; color:var(--muted);
+  }
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .dot{width:8px; height:8px; border-radius:2px; display:inline-block;}
+
+  .mobile-user{
+    text-align:center;
+    color:var(--muted);
+    font-size:11px;
+    margin-top:20px;
+  }
+  .mobile-user b{color:var(--accent-3);}
+  .flow-note{
+    text-align:center;
+    font-size:10.5px;
+    color:var(--line);
+    letter-spacing:.04em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Dvouvrstvá <span>n8n</span> architektura</h1>
+<div class="sub">1× ops Claude Code (správa serveru) · N× izolovaný pár per klient (n8n + jeho vlastní Claude Code)</div>
+
+<div class="stage">
+
+  <div class="row">
+    <div class="client-label"><b>Klient 1</b>klient1.agenti.domena.cz</div>
+    <div class="client-label"><b>Klient 2</b>klient2.agenti.domena.cz</div>
+    <div class="client-label"><b>Klient 3</b>klient3.agenti.domena.cz</div>
+  </div>
+  <div class="arrow-down">↓ HTTPS / 443</div>
+
+  <div class="vps">
+    <div class="vps-label">VPS · Docker host</div>
+
+    <div class="tier apache">
+      <div class="tier-label">Apache2 — 1 instance, VirtualHost per klient (jen n8n, nikdy claude-{klient})</div>
+      <div class="cards">
+        <div class="card"><b>klient1</b>→ 127.0.0.1:5679</div>
+        <div class="card"><b>klient2</b>→ 127.0.0.1:5680</div>
+        <div class="card"><b>klient3</b>→ 127.0.0.1:5681</div>
+        <div class="card"><b>certbot</b>Let's Encrypt</div>
+      </div>
+    </div>
+
+    <div class="flow-note">↓ proxy_http + proxy_wstunnel</div>
+
+    <div class="tier" style="background:rgba(255,255,255,.02); border:1px solid var(--line);">
+      <div class="tier-label">Klientské páry — každý ve VLASTNÍ izolované síti net-{klient}</div>
+      <div class="pairs">
+
+        <div class="pair">
+          <div class="pair-title">net-klient1</div>
+          <div class="pair-boxes">
+            <div class="box n8n"><b>n8n-klient1</b><span class="note">port 5679 · vlastní encryption key</span></div>
+            <div class="link">↕ interní n8n REST API</div>
+            <div class="box cc"><b>claude-klient1</b><span class="note">jen n8n API klíč tohoto klienta<br>ŽÁDNÝ docker.sock · remote-control</span></div>
+          </div>
+        </div>
+
+        <div class="pair">
+          <div class="pair-title">net-klient2</div>
+          <div class="pair-boxes">
+            <div class="box n8n"><b>n8n-klient2</b><span class="note">port 5680 · vlastní encryption key</span></div>
+            <div class="link">↕ interní n8n REST API</div>
+            <div class="box cc"><b>claude-klient2</b><span class="note">jen n8n API klíč tohoto klienta<br>ŽÁDNÝ docker.sock · remote-control</span></div>
+          </div>
+        </div>
+
+        <div class="pair">
+          <div class="pair-title">net-klient3</div>
+          <div class="pair-boxes">
+            <div class="box n8n"><b>n8n-klient3</b><span class="note">port 5681 · vlastní encryption key</span></div>
+            <div class="link">↕ interní n8n REST API</div>
+            <div class="box cc"><b>claude-klient3</b><span class="note">jen n8n API klíč tohoto klienta<br>ŽÁDNÝ docker.sock · remote-control</span></div>
+          </div>
+        </div>
+
+      </div>
+      <div class="flow-note" style="margin-top:10px;">sítě navzájem nevidí — žádná cesta mezi klient1 a klient2</div>
+    </div>
+
+    <div class="flow-note">↓ DB spojení jen do vlastní databáze</div>
+
+    <div class="tier db">
+      <div class="tier-label">Postgres — 1 instance (agenti-net), databáze per klient</div>
+      <div class="cards">
+        <div class="card"><b>db_klient1</b>user: u_klient1</div>
+        <div class="card"><b>db_klient2</b>user: u_klient2</div>
+        <div class="card"><b>db_klient3</b>user: u_klient3</div>
+      </div>
+    </div>
+
+    <div class="tier ops">
+      <div class="tier-label">Ops vrstva — agenti-net, odděleně od všech net-{klient}</div>
+      <div class="ops-row">
+        <div class="ops-main">
+          <b>claude-code-agenti (ops kontejner)</b>
+          <ul>
+            <li>jediný s přístupem k docker.sock</li>
+            <li>zakládá/ruší klientské páry (new-client.sh / remove-client.sh)</li>
+            <li>upravuje Apache vhosty, certbot, Postgres uživatele</li>
+            <li>nikdy nezasahuje přímo do workflow konkrétního klienta</li>
+          </ul>
+        </div>
+        <div class="ops-notes">
+          <div class="pill">claude remote-control<br>trvale běžící kontejner</div>
+          <div class="pill">@reboot cron<br>jako pojistka</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="mobile-user">David · <b>Claude mobile app</b> ↔ remote-control ↔ ops kontejner <i>nebo</i> kterýkoli claude-{klient} zvlášť</div>
+
+</div>
+
+<div class="legend">
+  <span><i class="dot" style="background:var(--accent)"></i>Apache / proxy</span>
+  <span><i class="dot" style="background:var(--accent-2)"></i>n8n (klient)</span>
+  <span><i class="dot" style="background:var(--accent-3)"></i>Claude Code (klient — izolovaný)</span>
+  <span><i class="dot" style="background:var(--accent-4)"></i>Claude Code (ops — plný přístup)</span>
+  <span><i class="dot" style="background:var(--muted)"></i>Postgres</span>
+</div>
+
+</body>
+</html>

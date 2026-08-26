@@ -1,0 +1,11 @@
+# tokeny a hesla
+.env
+*.env
+postgres.env
+
+# klientská data (hesla, encryption keys, DB dumpy)
+clients/*/.env
+clients/*/backups/
+
+# provozní stav generovaný na serveru (volitelně verzuj, pokud chceš)
+master-prompt.txt
