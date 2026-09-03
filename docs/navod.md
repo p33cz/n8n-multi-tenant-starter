@@ -151,11 +151,10 @@ FÁZE 7 — sledování spotřeby AI (Anthropic) per klient
   se zálohou DB do archivu (ať zůstane historie spotřeby i po zrušení)
 
 FÁZE 8 — self-management (pro budoucí přístup z mobilu)
-- zabal sám sebe (Claude Code) do Docker kontejneru se stejnou
-  konfigurací, jakou používám na jiném serveru (p33.cz): mount
-  /var/run/docker.sock, screen session se spuštěným
-  `claude remote-control`, @reboot cron, co tu session po restartu
-  nastartuje znovu
+- zabal sám sebe (Claude Code) do Docker kontejneru s trvalým
+  remote-control přístupem: mount /var/run/docker.sock, screen session
+  se spuštěným `claude remote-control`, @reboot cron, co tu session po
+  restartu nastartuje znovu
 - ověř, že běžíš dál i po přesunu do kontejneru
 
 FÁZE 9 — test
@@ -193,7 +192,7 @@ Použij to vědomě — název flagu není náhodný, agent pak provede i destru
 
 ## Po dokončení — běžný provoz
 
-Jakmile fáze 7 doběhne, budeš mít Claude Code natrvalo v kontejneru s remote-control přístupem — stejně jako na p33.cz. Nového klienta pak založíš buď:
+Jakmile fáze 7 doběhne, budeš mít Claude Code natrvalo v kontejneru s remote-control přístupem. Nového klienta pak založíš buď:
 
 ```bash
 docker exec -it claude-code-agenti bash
@@ -220,4 +219,4 @@ nebo prostě z mobilní appky napíšeš: *"Založ nového klienta 'firma-xyz'."
 
 ## Bezpečnostní poznámka
 
-Po fázi 7 běží Claude Code v kontejneru s mountnutým `/var/run/docker.sock` — to mu dává fakticky root nad celým serverem (může spustit privilegovaný kontejner a "uniknout" na hosta). To je vědomý kompromis stejný jako máš na p33.cz — funguje to, ale nepouštěj do tohoto kontejneru nedůvěryhodný vstup (cizí prompty, nedůvěryhodná data ke zpracování).
+Po fázi 7 běží Claude Code v kontejneru s mountnutým `/var/run/docker.sock` — to mu dává fakticky root nad celým serverem (může spustit privilegovaný kontejner a "uniknout" na hosta). Je to vědomý kompromis — funguje to, ale nepouštěj do tohoto kontejneru nedůvěryhodný vstup (cizí prompty, nedůvěryhodná data ke zpracování).
