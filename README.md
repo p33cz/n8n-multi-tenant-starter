@@ -27,13 +27,14 @@ bootstrap.sh        — spustí se na čerstvém VPS, nainstaluje Claude Code
 docs/navod.md        — psaný návod k celému postupu, krok za krokem
 docs/architektura.html — grafický diagram architektury
 scripts/              — sem Claude Code při instalaci vygeneruje
-                       new-client.sh / remove-client.sh (viz níže)
+                       new-client.sh / remove-client.sh / usage-report.sh
+                       (viz níže)
 ```
 
-`scripts/` je při prvním checkoutu prázdný — `new-client.sh` a
-`remove-client.sh` nejsou psané ručně předem, generuje je Claude Code
-sám během instalace (fáze 6 v `bootstrap.sh`) podle stavu konkrétního
-serveru. Jakmile je vygeneruje, commitni je do repa, ať máš verzovanou
+`scripts/` je při prvním checkoutu prázdný — `new-client.sh`,
+`remove-client.sh` a `usage-report.sh` nejsou psané ručně předem,
+generuje je Claude Code sám během instalace (fáze 6 a 7 v `bootstrap.sh`)
+podle stavu konkrétního serveru. Jakmile je vygeneruje, commitni je do repa, ať máš verzovanou
 i tuhle část.
 
 ## Použití na čerstvém VPS
@@ -58,6 +59,25 @@ doporučeno:
 - projít bezpečnostní poznámky v `docs/navod.md`
 - ověřit chování po `reboot` (automatický restart n8n/Postgres/ops
   kontejneru)
+
+## Sledování spotřeby a paušál
+
+Všichni `claude-{klient}` sdílejí jeden `ANTHROPIC_API_KEY`, takže
+Anthropic fakturuje spotřebu jako celek, ne po klientech. Pokud klienti
+platí paušál, který má náklady na AI pokrýt, potřebuješ spotřebu
+sledovat sám — fáze 7 v `bootstrap.sh` proto nechává Claude Code
+vygenerovat:
+
+- `clients/{klient}/usage.log` — spotřeba tokenů daného klienta podle
+  transkriptů jeho Claude Code relací
+- `pricing.conf` — aktuální ceník modelů (per 1M tokenů), aby šel snadno
+  aktualizovat
+- `scripts/usage-report.sh` — přehled spotřeby a odhadované ceny per
+  klient, s upozorněním, když se klient blíží limitu paušálu
+
+Je to jen orientační odhad (na základě lokálních transkriptů, ne
+oficiálního Anthropic vyúčtování) — pro přesná čísla použij Anthropic
+Console.
 
 ## Bezpečnostní poznámka
 

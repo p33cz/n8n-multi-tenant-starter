@@ -121,7 +121,36 @@ FÁZE 6 — provisioning skripty
 - /opt/agenti/scripts/remove-client.sh <jmeno>
   → zazálohuje DB dumpem, zastaví a smaže kontejner, odebere vhost
 
-FÁZE 7 — self-management (pro budoucí přístup z mobilu)
+FÁZE 7 — sledování spotřeby AI (Anthropic) per klient
+- všichni claude-{klient} sdílejí stejný ANTHROPIC_API_KEY, takže spotřebu
+  a náklady na AI musíme sledovat sami, mimo Anthropic fakturaci — klienti
+  totiž platí paušál, který má náklady pokrýt, a chci vědět, jestli
+  pokrývá
+- v každém claude-{klient} kontejneru nastav pravidelnou úlohu (cron, např.
+  jednou za hodinu), která projde lokální transkripty Claude Code relací
+  (JSONL soubory s poli usage: input_tokens/output_tokens/
+  cache_creation_input_tokens/cache_read_input_tokens za jednotlivé
+  odpovědi) a nově přibylé záznamy připíše do
+  /opt/agenti/clients/{klient}/usage.log (řádek = datum, model, typy
+  tokenů, počty)
+- vytvoř /opt/agenti/pricing.conf — cena za 1M input/output/cache tokenů
+  pro každý používaný model, ať se dá snadno aktualizovat, až Anthropic
+  ceník změní
+- vytvoř /opt/agenti/scripts/usage-report.sh, který projde usage.log všech
+  klientů za zvolené období (výchozí: aktuální kalendářní měsíc), spočítá
+  odhadovanou cenu podle pricing.conf a vypíše přehled: klient, spotřeba
+  tokenů, odhadovaná cena v USD, a pokud má klient v clients.md vyplněný
+  paušál, i kolik % paušálu spotřeba představuje — klienty nad 80 %
+  paušálu ve výstupu zvýrazni (jen upozornění, nic se automaticky
+  neblokuje)
+- do clients.md přidej u každého klienta sloupec pro měsíční paušál
+  (ať si ho tam mohu sám dopsat)
+- do CLAUDE.md zapiš konvenci: umístění a formát usage.log, kde je
+  pricing.conf, jak se počítá odhad ceny a jak spustit usage-report.sh
+- v remove-client.sh při rušení klienta usage.log nemaž, přesuň ho spolu
+  se zálohou DB do archivu (ať zůstane historie spotřeby i po zrušení)
+
+FÁZE 8 — self-management (pro budoucí přístup z mobilu)
 - zabal sám sebe (Claude Code) do Docker kontejneru se stejnou
   konfigurací, jakou používám na jiném serveru (p33.cz): mount
   /var/run/docker.sock, screen session se spuštěným
@@ -129,10 +158,14 @@ FÁZE 7 — self-management (pro budoucí přístup z mobilu)
   nastartuje znovu
 - ověř, že běžíš dál i po přesunu do kontejneru
 
-FÁZE 8 — test
+FÁZE 9 — test
 - spusť new-client.sh s testovacím klientem "test1"
 - ověř, že n8n na jeho subdoméně naběhne přes HTTPS a websocket
   (živý náhled běhu workflow) funguje
+- v claude-test1 vyvolej aspoň jednu odpověď, počkej na proběhnutí
+  cronu (nebo ho spusť ručně) a ověř, že se v
+  /opt/agenti/clients/test1/usage.log objevil záznam a že
+  usage-report.sh test1 správně vypíše
 - ukaž mi obsah clients.md a shrň, co všechno jsi po cestě nainstaloval
   a jaké výchozí volby jsi udělal tam, kde jsem ti nedal přesnou
   specifikaci
@@ -178,6 +211,8 @@ nebo prostě z mobilní appky napíšeš: *"Založ nového klienta 'firma-xyz'."
 - [ ] websocket v n8n editoru funguje (live náhled běhu workflow)
 - [ ] `cat /opt/agenti/CLAUDE.md` — obsahuje všechny konvence, které agent zvolil
 - [ ] `crontab -l` — `@reboot` záznam pro remote-control existuje
+- [ ] `crontab -l` v `claude-test1` — hodinová úloha pro zápis do `usage.log` existuje
+- [ ] `/opt/agenti/scripts/usage-report.sh test1` vypíše odhadovanou spotřebu a cenu
 - [ ] zkusit `reboot` a ověřit, že se vše (Postgres, testovací n8n, Claude Code remote-control) samo nastartuje
 - [ ] hesla a klíče v `.env` souborech mají práva `600` a nejsou v gitu
 
