@@ -40,7 +40,7 @@ i tuhle část.
 ## Použití na čerstvém VPS
 
 ```bash
-git clone <tvoje-repo-url> /opt/agenti
+git clone https://github.com/p33cz/n8n-multi-tenant-starter.git /opt/agenti
 cd /opt/agenti
 chmod +x bootstrap.sh
 sudo ./bootstrap.sh

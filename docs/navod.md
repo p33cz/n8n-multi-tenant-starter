@@ -1,222 +1,113 @@
-# Návod: VPS, kde si vše nastaví Claude Code sám
+# Návod k instalaci
 
-Cíl: na čerstvém VPS uděláš jen minimální bootstrap (nainstaluješ Claude Code), pak mu dáš doménu a token — a on sám zjistí stav serveru, doinstaluje co chybí, a postaví celou multi-tenant n8n infrastrukturu (Apache, Postgres, Docker, per-klient kontejnery, provisioning skripty).
+## K čemu to je
 
----
+Self-hosted multi-tenant hosting pro n8n: každý klient dostane vlastní
+izolovanou n8n instanci na vlastní subdoméně a k ní vlastního AI
+asistenta (Claude Code) pro tvorbu a úpravu workflow.
 
-## Co musíš udělat ty (a proč to nejde jinak)
+Architektura je dvouvrstvá:
 
-**1. Zaplatit VPS** — Debian 12 nebo Ubuntu 24.04, min. 4 vCPU / 8 GB RAM. Poznamenej si veřejnou IP adresu.
+- **Ops vrstva** (1× na server) — Claude Code s přístupem k
+  `docker.sock`, spravuje celý server: zakládá/ruší klienty, upravuje
+  Apache/Postgres/firewall. Nikdy nezasahuje přímo do dat konkrétního
+  klienta.
+- **Klientská vrstva** (1× pár na klienta) — `n8n-{klient}` +
+  `claude-{klient}` ve vlastní izolované Docker síti `net-{klient}`.
+  Klientský Claude Code mluví jen s n8n REST API svého souseda, nemá
+  `docker.sock` ani přístup k jiným klientům.
 
-**2. Nastavit DNS** — u svého DNS providera (kde spravuješ `tvojedomena.cz`) založ:
-```
-*.agenti.tvojedomena.cz    A    <IP tvého VPS>
-```
-Tohle musíš udělat ty ručně — Claude Code nemá přístup k tvému DNS účtu, pokud mu ho výslovně nedáš (API token registrátora). Bez tohoto kroku nedostane žádný SSL certifikát.
+Detailní diagram: [`architektura.html`](architektura.html).
 
-**3. Mít Anthropic API token** — ten mu dáš na vyžádání v kroku níž.
+## Co je potřeba předem
 
-To je vše, co musíš udělat ty. Zbytek dělá agent.
+- VPS s Debianem 12 nebo Ubuntu 24.04, min. 4 vCPU / 8 GB RAM, se
+  známou veřejnou IP adresou
+- doména, u které jde nastavit wildcard DNS A záznam (`*.doména` →
+  IP serveru) — bez toho nepůjde vydat SSL certifikát pro subdomény
+  klientů
+- Anthropic API token
 
----
+## Instalace
 
-## Krok 1 — Bootstrap: nainstaluj Claude Code na čerstvý server
-
-Připoj se přes SSH jako root:
-```bash
-ssh root@<IP-tveho-VPS>
-```
-
-Spusť tenhle jednorázový bootstrap (funguje na Debianu i Ubuntu, nezáleží na tom, co je na serveru už nainstalované):
-
-```bash
-# Node.js (potřebuje ho Claude Code CLI)
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs
-
-# Claude Code CLI
-npm install -g @anthropic-ai/claude-code
-
-# pracovní adresář projektu
-mkdir -p /opt/agenti && cd /opt/agenti
-```
-
-Nastav API token:
-```bash
-export ANTHROPIC_API_KEY="sk-ant-tvuj-token"
-```
-
-*(Ať ho nemusíš zadávat po každém restartu terminálu, přidej tenhle řádek i do `~/.bashrc`.)*
-
----
-
-## Krok 2 — Spusť Claude Code a dej mu instrukce
+Na čerstvém VPS, přihlášený jako root:
 
 ```bash
+git clone https://github.com/p33cz/n8n-multi-tenant-starter.git /opt/agenti
 cd /opt/agenti
-claude
+chmod +x bootstrap.sh
+sudo ./bootstrap.sh
 ```
 
-Otevře se interaktivní chat rovnou v terminálu. Vlož mu tenhle prompt (v něm se tě sám zeptá na doménu — nemusíš ji vypisovat předem):
+Skript se zeptá na doménu a Anthropic API token, ověří DNS, nainstaluje
+Node.js a Claude Code CLI a pak mu předá řízení s kompletními
+instrukcemi. **Od tohoto bodu je instalace plně automatická** — žádný
+prompt se nikam ručně nekopíruje, Claude Code postupuje sám podle
+instrukcí zabudovaných v `bootstrap.sh` (proměnná `PROMPT`).
 
-```
-Jsem na čerstvém VPS (root přístup, Debian/Ubuntu — zjisti si sám jaký).
-Chci na něm postavit multi-tenant hosting pro n8n, kde bude mít každý
-klient vlastní izolovanou n8n instanci na vlastní subdoméně.
+Claude Code si sám zjistí stav serveru, doinstaluje chybějící software
+a postupně postaví:
 
-Než začneš, zeptej se mě na:
-1. primární doménu, pod kterou budou subdomény klientů (např.
-   agenti.tvojedomena.cz — klienti pak budou na klient1.agenti...)
-2. jestli už mám na tuhle doménu nastavený wildcard DNS A záznam
-   směřující na IP tohoto serveru (pokud ne, řekni mi přesně, co mám
-   nastavit, a počkej, než to potvrdím, než budeš žádat o certifikáty)
+1. základní zabezpečení serveru (firewall, fail2ban)
+2. Docker a izolované sítě
+3. Postgres databázi
+4. Apache jako reverzní proxy s HTTPS certifikáty
+5. šablony a konvence (zapsané do `CLAUDE.md`, aby se jich držel i
+   příště)
+6. provisioning skripty `new-client.sh` / `remove-client.sh`
+7. sledování spotřeby AI per klient (`usage.log`, `pricing.conf`,
+   `usage-report.sh`)
+8. self-management — sám sebe zabalí do trvale běžícího kontejneru
+   s přístupem přes `claude remote-control` (i po `reboot`)
+9. test na zkušebním klientovi
 
-Pak proveď kompletní instalaci a konfiguraci:
+Po každé fázi Claude Code stručně napíše, co udělal a jaké výchozí
+volby zvolil tam, kde instrukce nedávaly přesnou specifikaci.
 
-FÁZE 0 — průzkum
-- zjisti distribuci, verzi, co už je nainstalované (apache, docker,
-  postgres, certbot, ufw/firewall) — nic needuplikuj, jen doplň chybějící
+### Interaktivně, nebo plně autonomně
 
-FÁZE 1 — základní zabezpečení serveru
-- firewall (ufw): povol jen SSH, 80, 443
-- fail2ban na SSH i Apache
+Skript se na konci zeptá, jak má Claude Code běžet:
 
-FÁZE 2 — Docker
-- nainstaluj Docker + docker compose plugin, pokud chybí
-- vytvoř Docker síť `agenti-net` (bridge) pro n8n kontejnery a Postgres
-
-FÁZE 3 — Postgres
-- rozjeď Postgres jako Docker kontejner (image postgres:16) v síti
-  agenti-net, data na perzistentním volume, žádný veřejný port ven
-- ulož root heslo do /opt/agenti/postgres.env (mimo git)
-
-FÁZE 4 — Apache2 jako reverzní proxy
-- nainstaluj apache2 a certbot (python3-certbot-apache), pokud chybí
-- aktivuj moduly: proxy proxy_http proxy_wstunnel rewrite ssl headers
-- zajisti certifikát pro subdomény (wildcard přes DNS-01 pokud máš
-  přístup k DNS API, jinak certbot --apache per klient při zakládání)
-
-FÁZE 5 — šablony a konvence
-- vytvoř adresářovou strukturu:
-  /opt/agenti/clients/{klient}/docker-compose.yml + .env
-  /opt/agenti/scripts/
-  /opt/agenti/clients.md   (evidence klientů, portů, stavu)
-  /opt/agenti/CLAUDE.md    (zapiš do něj VŠECHNY konvence, které
-                            zvolíš v této fázi — jméno kontejnerů,
-                            číslování portů od 5679, jméno DB/uživatelů
-                            db_{klient}/u_{klient}, umístění vhostů,
-                            atd. — ať se jich příště držíš i ty sám)
-- šablona docker-compose.yml pro jeden n8n klientský kontejner
-  (vlastní port, vlastní N8N_ENCRYPTION_KEY, napojení na jeho
-  vlastní databázi v Postgresu)
-- šablona Apache VirtualHostu (HTTPS + websocket proxy pro n8n editor)
-
-FÁZE 6 — provisioning skripty
-- /opt/agenti/scripts/new-client.sh <jmeno>
-  → najde volný port, vygeneruje heslo + encryption key,
-    založí Postgres DB a uživatele s právy jen na svou DB,
-    vytvoří a spustí docker-compose pro klienta,
-    vytvoří a aktivuje Apache vhost, vyřídí certifikát,
-    zapíše do clients.md, vypíše finální URL
-- /opt/agenti/scripts/remove-client.sh <jmeno>
-  → zazálohuje DB dumpem, zastaví a smaže kontejner, odebere vhost
-
-FÁZE 7 — sledování spotřeby AI (Anthropic) per klient
-- všichni claude-{klient} sdílejí stejný ANTHROPIC_API_KEY, takže spotřebu
-  a náklady na AI musíme sledovat sami, mimo Anthropic fakturaci — klienti
-  totiž platí paušál, který má náklady pokrýt, a chci vědět, jestli
-  pokrývá
-- v každém claude-{klient} kontejneru nastav pravidelnou úlohu (cron, např.
-  jednou za hodinu), která projde lokální transkripty Claude Code relací
-  (JSONL soubory s poli usage: input_tokens/output_tokens/
-  cache_creation_input_tokens/cache_read_input_tokens za jednotlivé
-  odpovědi) a nově přibylé záznamy připíše do
-  /opt/agenti/clients/{klient}/usage.log (řádek = datum, model, typy
-  tokenů, počty)
-- vytvoř /opt/agenti/pricing.conf — cena za 1M input/output/cache tokenů
-  pro každý používaný model, ať se dá snadno aktualizovat, až Anthropic
-  ceník změní
-- vytvoř /opt/agenti/scripts/usage-report.sh, který projde usage.log všech
-  klientů za zvolené období (výchozí: aktuální kalendářní měsíc), spočítá
-  odhadovanou cenu podle pricing.conf a vypíše přehled: klient, spotřeba
-  tokenů, odhadovaná cena v USD, a pokud má klient v clients.md vyplněný
-  paušál, i kolik % paušálu spotřeba představuje — klienty nad 80 %
-  paušálu ve výstupu zvýrazni (jen upozornění, nic se automaticky
-  neblokuje)
-- do clients.md přidej u každého klienta sloupec pro měsíční paušál
-  (ať si ho tam mohu sám dopsat)
-- do CLAUDE.md zapiš konvenci: umístění a formát usage.log, kde je
-  pricing.conf, jak se počítá odhad ceny a jak spustit usage-report.sh
-- v remove-client.sh při rušení klienta usage.log nemaž, přesuň ho spolu
-  se zálohou DB do archivu (ať zůstane historie spotřeby i po zrušení)
-
-FÁZE 8 — self-management (pro budoucí přístup z mobilu)
-- zabal sám sebe (Claude Code) do Docker kontejneru s trvalým
-  remote-control přístupem: mount /var/run/docker.sock, screen session
-  se spuštěným `claude remote-control`, @reboot cron, co tu session po
-  restartu nastartuje znovu
-- ověř, že běžíš dál i po přesunu do kontejneru
-
-FÁZE 9 — test
-- spusť new-client.sh s testovacím klientem "test1"
-- ověř, že n8n na jeho subdoméně naběhne přes HTTPS a websocket
-  (živý náhled běhu workflow) funguje
-- v claude-test1 vyvolej aspoň jednu odpověď, počkej na proběhnutí
-  cronu (nebo ho spusť ručně) a ověř, že se v
-  /opt/agenti/clients/test1/usage.log objevil záznam a že
-  usage-report.sh test1 správně vypíše
-- ukaž mi obsah clients.md a shrň, co všechno jsi po cestě nainstaloval
-  a jaké výchozí volby jsi udělal tam, kde jsem ti nedal přesnou
-  specifikaci
-
-Postupuj fázi po fázi, po každé krátce napiš, co jsi udělal a co jsi
-musel rozhodnout sám. Pokud narazíš na chybu, zkus ji opravit sám,
-než se mě zeptáš.
-```
-
-Claude Code se tě po odeslání zeptá na doménu — odpovíš přímo v chatu (`agenti.tvojedomena.cz`) a potvrdíš, že DNS je nastavené. Dál už pokračuje sám.
-
----
-
-## Co dělat s potvrzováním akcí
-
-Claude Code se ve výchozím režimu bude občas ptát na potvrzení před rizikovými příkazy (instalace balíčků, změny firewallu apod.). Pro tenhle jednorázový bootstrap je to v pořádku nechat — je to čerstvý server, není co pokazit, a je dobré vidět, co přesně dělá.
-
-Pokud chceš, ať běží plně autonomně bez přerušování (rychlejší, ale bez brzdy), spusť ho místo `claude` s:
-```bash
-claude --dangerously-skip-permissions
-```
-Použij to vědomě — název flagu není náhodný, agent pak provede i destruktivní příkazy bez ptaní. Na čerstvém VPS, kde ještě nic důležitého neběží, je to rozumný kompromis.
-
----
+- **interaktivně** — před rizikovými kroky (instalace balíčků, změny
+  firewallu apod.) se zeptá na potvrzení; doporučeno pro první běh
+- **plně autonomně** (`--dangerously-skip-permissions`) — projede
+  vše bez ptaní, rychlejší, ale bez brzdy. Na čerstvém VPS, kde ještě
+  nic důležitého neběží, je to rozumný kompromis — ale je to vědomá
+  volba, ne výchozí chování.
 
 ## Po dokončení — běžný provoz
 
-Jakmile fáze 7 doběhne, budeš mít Claude Code natrvalo v kontejneru s remote-control přístupem. Nového klienta pak založíš buď:
+Po instalaci běží ops Claude Code natrvalo v kontejneru s
+remote-control přístupem. Nového klienta pak založí buď příkaz:
 
 ```bash
 docker exec -it claude-code-agenti bash
 cd /workspace && ./scripts/new-client.sh jmeno-klienta
 ```
 
-nebo prostě z mobilní appky napíšeš: *"Založ nového klienta 'firma-xyz'."*
-
----
+nebo věta napsaná Claude Code asistentovi (třeba z mobilu): *"Založ
+nového klienta 'firma-xyz'."*
 
 ## Kontrolní seznam po prvním běhu
 
 - [ ] `docker ps` — Postgres + testovací n8n kontejner běží
-- [ ] `https://test1.agenti.tvojedomena.cz` se otevře, certifikát je platný
+- [ ] testovací subdoména se otevře přes HTTPS, certifikát je platný
 - [ ] websocket v n8n editoru funguje (live náhled běhu workflow)
 - [ ] `cat /opt/agenti/CLAUDE.md` — obsahuje všechny konvence, které agent zvolil
 - [ ] `crontab -l` — `@reboot` záznam pro remote-control existuje
-- [ ] `crontab -l` v `claude-test1` — hodinová úloha pro zápis do `usage.log` existuje
-- [ ] `/opt/agenti/scripts/usage-report.sh test1` vypíše odhadovanou spotřebu a cenu
-- [ ] zkusit `reboot` a ověřit, že se vše (Postgres, testovací n8n, Claude Code remote-control) samo nastartuje
+- [ ] `crontab -l` v testovacím klientském kontejneru — hodinová úloha pro zápis do `usage.log` existuje
+- [ ] `/opt/agenti/scripts/usage-report.sh <klient>` vypíše odhadovanou spotřebu a cenu
+- [ ] `reboot` a ověřit, že se vše (Postgres, testovací n8n, Claude Code remote-control) samo nastartuje
 - [ ] hesla a klíče v `.env` souborech mají práva `600` a nejsou v gitu
-
----
 
 ## Bezpečnostní poznámka
 
-Po fázi 7 běží Claude Code v kontejneru s mountnutým `/var/run/docker.sock` — to mu dává fakticky root nad celým serverem (může spustit privilegovaný kontejner a "uniknout" na hosta). Je to vědomý kompromis — funguje to, ale nepouštěj do tohoto kontejneru nedůvěryhodný vstup (cizí prompty, nedůvěryhodná data ke zpracování).
+Ops vrstva běží v kontejneru s mountnutým `/var/run/docker.sock` — to
+jí dává fakticky root nad celým serverem (může spustit privilegovaný
+kontejner a "uniknout" na hosta). Je to vědomý kompromis, který
+umožňuje spravovat celý server i klienty na dálku — funguje to, ale do
+tohoto kontejneru by se neměl pouštět nedůvěryhodný vstup (cizí
+prompty, nedůvěryhodná data ke zpracování).
+
+Klientské `claude-{klient}` kontejnery `docker.sock` mít nesmí — to je
+jádro izolace mezi klienty.
