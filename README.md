@@ -2,10 +2,13 @@
 
 ![Status](https://img.shields.io/badge/status-starter--kit-yellow)
 ![Shell](https://img.shields.io/badge/bootstrap-bash-lightgrey)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Startovací bod pro self-hosted multi-tenant n8n hosting na VPS, kde
 architekturu (Apache, Postgres, Docker sítě, izolované klientské páry)
 staví Claude Code na základě jednoho promptu.
+
+Autor: **David Helcl**
 
 ## Obsah
 
@@ -16,6 +19,7 @@ staví Claude Code na základě jednoho promptu.
 - [Sledování spotřeby a paušál](#sledování-spotřeby-a-paušál)
 - [Stav projektu](#stav-projektu)
 - [Bezpečnostní poznámky](#bezpečnostní-poznámky)
+- [Licence](#licence)
 
 ## Jak to funguje
 
@@ -165,3 +169,8 @@ doporučeno:
 `docker.sock` smí mít mountnutý **jen** ops kontejner — to je jádro
 izolace mezi klienty. Plné vysvětlení rizik a kompromisů:
 [`docs/navod.md` → Bezpečnostní poznámka](docs/navod.md#bezpečnostní-poznámka).
+
+## Licence
+
+[MIT](LICENSE) — © 2026 David Helcl. Kód je možné svobodně používat,
+upravovat i šířit dál, licence jen vyžaduje zachovat copyright notice.
