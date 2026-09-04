@@ -17,7 +17,7 @@ Dvouvrstvý model:
   `docker.sock` ani přístup k jiným klientům.
 
 Detailní diagram: [`docs/architektura.html`](docs/architektura.html)
-(otevři v prohlížeči).
+(HTML soubor, otevírá se v prohlížeči).
 
 ## Obsah repozitáře
 
@@ -34,8 +34,8 @@ scripts/              — sem Claude Code při instalaci vygeneruje
 `scripts/` je při prvním checkoutu prázdný — `new-client.sh`,
 `remove-client.sh` a `usage-report.sh` nejsou psané ručně předem,
 generuje je Claude Code sám během instalace (fáze 6 a 7 v `bootstrap.sh`)
-podle stavu konkrétního serveru. Jakmile je vygeneruje, commitni je do repa, ať máš verzovanou
-i tuhle část.
+podle stavu konkrétního serveru. Jakmile je vygeneruje, je vhodné je
+commitnout do repa, aby byla verzovaná i tato část.
 
 ## Použití na čerstvém VPS
 
@@ -64,9 +64,9 @@ doporučeno:
 
 Všichni `claude-{klient}` sdílejí jeden `ANTHROPIC_API_KEY`, takže
 Anthropic fakturuje spotřebu jako celek, ne po klientech. Pokud klienti
-platí paušál, který má náklady na AI pokrýt, potřebuješ spotřebu
-sledovat sám — fáze 7 v `bootstrap.sh` proto nechává Claude Code
-vygenerovat:
+platí paušál, který má náklady na AI pokrýt, je potřeba spotřebu
+sledovat mimo Anthropic fakturaci — fáze 7 v `bootstrap.sh` proto
+nechává Claude Code vygenerovat:
 
 - `clients/{klient}/usage.log` — spotřeba tokenů daného klienta podle
   transkriptů jeho Claude Code relací
@@ -83,5 +83,5 @@ Console.
 
 `docker.sock` má mountnutý **jen** ops kontejner. Klientské
 `claude-{klient}` kontejnery ho mít nesmí — to je jádro izolace mezi
-klienty. Pokud někdy najdeš v generovaném compose souboru
-`claude-{klient}` s `docker.sock` mountem, je to chyba, ne feature.
+klienty. Pokud se v generovaném compose souboru objeví
+`claude-{klient}` s `docker.sock` mountem, jde o chybu, ne o feature.
