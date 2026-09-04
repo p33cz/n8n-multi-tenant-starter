@@ -1,23 +1,9 @@
 # Návod k instalaci
 
-## K čemu to je
-
-Self-hosted multi-tenant hosting pro n8n: každý klient dostane vlastní
-izolovanou n8n instanci na vlastní subdoméně a k ní vlastního AI
-asistenta (Claude Code) pro tvorbu a úpravu workflow.
-
-Architektura je dvouvrstvá:
-
-- **Ops vrstva** (1× na server) — Claude Code s přístupem k
-  `docker.sock`, spravuje celý server: zakládá/ruší klienty, upravuje
-  Apache/Postgres/firewall. Nikdy nezasahuje přímo do dat konkrétního
-  klienta.
-- **Klientská vrstva** (1× pár na klienta) — `n8n-{klient}` +
-  `claude-{klient}` ve vlastní izolované Docker síti `net-{klient}`.
-  Klientský Claude Code mluví jen s n8n REST API svého souseda, nemá
-  `docker.sock` ani přístup k jiným klientům.
-
-Detailní diagram: [`architektura.html`](architektura.html).
+Podrobný postup instalace [n8n multi-tenant starter](../README.md) na
+čerstvý VPS. Co projekt dělá a jak funguje jeho architektura popisuje
+[`README.md`](../README.md#jak-to-funguje) — tenhle dokument se
+soustředí jen na samotnou instalaci a provoz.
 
 ## Co je potřeba předem
 
@@ -33,8 +19,8 @@ Detailní diagram: [`architektura.html`](architektura.html).
 Na čerstvém VPS, přihlášený jako root:
 
 ```bash
-git clone https://github.com/p33cz/n8n-multi-tenant-starter.git /opt/agenti
-cd /opt/agenti
+git clone https://github.com/p33cz/n8n-multi-tenant-starter.git /opt/n8n-mts
+cd /opt/n8n-mts
 chmod +x bootstrap.sh
 sudo ./bootstrap.sh
 ```
@@ -81,7 +67,7 @@ Po instalaci běží ops Claude Code natrvalo v kontejneru s
 remote-control přístupem. Nového klienta pak založí buď příkaz:
 
 ```bash
-docker exec -it claude-code-agenti bash
+docker exec -it claude-code-n8n-mts bash
 cd /workspace && ./scripts/new-client.sh jmeno-klienta
 ```
 
@@ -93,10 +79,10 @@ nového klienta 'firma-xyz'."*
 - [ ] `docker ps` — Postgres + testovací n8n kontejner běží
 - [ ] testovací subdoména se otevře přes HTTPS, certifikát je platný
 - [ ] websocket v n8n editoru funguje (live náhled běhu workflow)
-- [ ] `cat /opt/agenti/CLAUDE.md` — obsahuje všechny konvence, které agent zvolil
+- [ ] `cat /opt/n8n-mts/CLAUDE.md` — obsahuje všechny konvence, které agent zvolil
 - [ ] `crontab -l` — `@reboot` záznam pro remote-control existuje
 - [ ] `crontab -l` v testovacím klientském kontejneru — hodinová úloha pro zápis do `usage.log` existuje
-- [ ] `/opt/agenti/scripts/usage-report.sh <klient>` vypíše odhadovanou spotřebu a cenu
+- [ ] `/opt/n8n-mts/scripts/usage-report.sh <klient>` vypíše odhadovanou spotřebu a cenu
 - [ ] `reboot` a ověřit, že se vše (Postgres, testovací n8n, Claude Code remote-control) samo nastartuje
 - [ ] hesla a klíče v `.env` souborech mají práva `600` a nejsou v gitu
 

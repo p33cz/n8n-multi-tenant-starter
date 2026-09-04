@@ -73,7 +73,7 @@ Dvouvrstvý model:
 
 ```mermaid
 flowchart TB
-    subgraph opsnet["Docker síť: agenti-net"]
+    subgraph opsnet["Docker síť: n8n-mts-net"]
         OPS["ops Claude Code<br/>(docker.sock)"]
         PG[("Postgres")]
     end
@@ -103,8 +103,8 @@ Na čerstvém VPS (Debian 12 nebo Ubuntu 24.04, min. 4 vCPU / 8 GB RAM),
 přihlášený jako root:
 
 ```bash
-git clone https://github.com/p33cz/n8n-multi-tenant-starter.git /opt/agenti
-cd /opt/agenti
+git clone https://github.com/p33cz/n8n-multi-tenant-starter.git /opt/n8n-mts
+cd /opt/n8n-mts
 chmod +x bootstrap.sh
 sudo ./bootstrap.sh
 ```
@@ -162,7 +162,6 @@ doporučeno:
 
 ## Bezpečnostní poznámky
 
-`docker.sock` má mountnutý **jen** ops kontejner. Klientské
-`claude-{klient}` kontejnery ho mít nesmí — to je jádro izolace mezi
-klienty. Pokud se v generovaném compose souboru objeví
-`claude-{klient}` s `docker.sock` mountem, jde o chybu, ne o feature.
+`docker.sock` smí mít mountnutý **jen** ops kontejner — to je jádro
+izolace mezi klienty. Plné vysvětlení rizik a kompromisů:
+[`docs/navod.md` → Bezpečnostní poznámka](docs/navod.md#bezpečnostní-poznámka).

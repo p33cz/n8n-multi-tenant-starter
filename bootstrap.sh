@@ -16,7 +16,7 @@ ok()   { echo -e "${C_OK}✔${C_RESET} $1"; }
 warn() { echo -e "${C_WARN}⚠${C_RESET} $1"; }
 err()  { echo -e "${C_ERR}✘${C_RESET} $1"; }
 
-WORKDIR="/opt/agenti"
+WORKDIR="/opt/n8n-mts"
 PROMPT_FILE="$WORKDIR/master-prompt.txt"
 
 # ---------- 0. kontrola root ----------
@@ -42,7 +42,7 @@ ok "Veřejná IP serveru: $SERVER_IP"
 echo ""
 
 # ---------- 2. doména ----------
-read -rp "Zadej primární doménu pro klienty (např. agenti.tvojedomena.cz): " DOMAIN
+read -rp "Zadej primární doménu pro klienty (např. n8n.tvojedomena.cz): " DOMAIN
 if [[ -z "$DOMAIN" ]]; then
   err "Doména je povinná, končím."
   exit 1
@@ -162,7 +162,7 @@ Chci postavit multi-tenant hosting pro n8n s DVOUVRSTVOU architekturou:
      REST API tohoto jednoho klienta (přes interní hostname n8n-{klient}
      v jejich společné izolované síti). Tenhle kontejner NEMÁ mountnutý
      docker.sock a NEVIDÍ žádný jiný kontejner na serveru. Slouží k tomu,
-     abych já (David) mohl tomu klientovi nechat vytvářet/upravovat jeho
+     abych já mohl tomu klientovi nechat vytvářet/upravovat jeho
      agenty a workflow, aniž bych se mohl technicky splést a zasáhnout
      do dat jiného klienta — izolace musí být síťová/strukturální, ne
      jen "dávat pozor".
@@ -179,17 +179,17 @@ FÁZE 1 — základní zabezpečení serveru
 
 FÁZE 2 — Docker
 - nainstaluj Docker + docker compose plugin, pokud chybí
-- vytvoř Docker síť \`agenti-net\` (bridge) — JEN pro Postgres a ops vrstvu,
+- vytvoř Docker síť \`n8n-mts-net\` (bridge) — JEN pro Postgres a ops vrstvu,
   klientské páry do ní NEPATŘÍ
 
 FÁZE 3 — Postgres
 - rozjeď Postgres jako Docker kontejner (image postgres:16) v síti
-  agenti-net, data na perzistentním volume, žádný veřejný port ven
-- ulož root heslo do /opt/agenti/postgres.env (mimo git)
+  n8n-mts-net, data na perzistentním volume, žádný veřejný port ven
+- ulož root heslo do /opt/n8n-mts/postgres.env (mimo git)
 - Postgres musí být dosažitelný i ze sítí net-{klient} — připoj kontejner
-  Postgres do agenti-net i do každé nově vznikající net-{klient} (nebo
+  Postgres do n8n-mts-net i do každé nově vznikající net-{klient} (nebo
   zvol jiný rozumný způsob, jak DB kontejner uvidí klientská síť, aniž
-  klient uvidí cokoli jiného v agenti-net — a napiš mi, jak jsi to vyřešil)
+  klient uvidí cokoli jiného v n8n-mts-net — a napiš mi, jak jsi to vyřešil)
 
 FÁZE 4 — Apache2 jako reverzní proxy
 - nainstaluj apache2 a certbot (python3-certbot-apache), pokud chybí
@@ -197,10 +197,10 @@ FÁZE 4 — Apache2 jako reverzní proxy
 
 FÁZE 5 — šablony a konvence
 - vytvoř strukturu:
-  /opt/agenti/clients/{klient}/docker-compose.yml + .env
-  /opt/agenti/scripts/
-  /opt/agenti/clients.md   (evidence klientů, portů, stavu)
-  /opt/agenti/CLAUDE.md    (zapiš tam všechny konvence, které zvolíš —
+  /opt/n8n-mts/clients/{klient}/docker-compose.yml + .env
+  /opt/n8n-mts/scripts/
+  /opt/n8n-mts/clients.md   (evidence klientů, portů, stavu)
+  /opt/n8n-mts/CLAUDE.md    (zapiš tam všechny konvence, které zvolíš —
                             jméno kontejnerů, síť net-{klient}, číslování
                             portů n8n od 5679, jméno DB/uživatelů
                             db_{klient}/u_{klient}, umístění vhostů,
@@ -212,7 +212,7 @@ FÁZE 5 — šablony a konvence
   vystavuje ven POUZE n8n-{klient}, claude-{klient} nemá žádný veřejný port
 
 FÁZE 6 — provisioning skripty
-- /opt/agenti/scripts/new-client.sh <jmeno>
+- /opt/n8n-mts/scripts/new-client.sh <jmeno>
   → najde volný port, vygeneruje heslo + encryption key, založí
     Postgres DB a uživatele s právy jen na svou DB
   → vytvoří síť net-{jmeno}, spustí n8n-{jmeno} v ní
@@ -225,7 +225,7 @@ FÁZE 6 — provisioning skripty
   → vytvoří a aktivuje Apache vhost pro n8n-{jmeno}, vyřídí certifikát
   → zapíše do clients.md (jméno, port, síť, kdy založen)
   → vypíše finální URL n8n a stav claude-{jmeno} (remote-control ready)
-- /opt/agenti/scripts/remove-client.sh <jmeno>
+- /opt/n8n-mts/scripts/remove-client.sh <jmeno>
   → zazálohuje DB dumpem, zastaví a smaže oba kontejnery i síť
     net-{jmeno}, odebere vhost
 
@@ -239,12 +239,12 @@ FÁZE 7 — sledování spotřeby AI (Anthropic) per klient
   (JSONL soubory s poli usage: input_tokens/output_tokens/
   cache_creation_input_tokens/cache_read_input_tokens za jednotlivé
   odpovědi) a nově přibylé záznamy připíše do
-  /opt/agenti/clients/{klient}/usage.log (řádek = datum, model, typy
+  /opt/n8n-mts/clients/{klient}/usage.log (řádek = datum, model, typy
   tokenů, počty)
-- vytvoř /opt/agenti/pricing.conf — cena za 1M input/output/cache tokenů
+- vytvoř /opt/n8n-mts/pricing.conf — cena za 1M input/output/cache tokenů
   pro každý používaný model, ať se dá snadno aktualizovat, až Anthropic
   ceník změní
-- vytvoř /opt/agenti/scripts/usage-report.sh, který projde usage.log všech
+- vytvoř /opt/n8n-mts/scripts/usage-report.sh, který projde usage.log všech
   klientů za zvolené období (výchozí: aktuální kalendářní měsíc), spočítá
   odhadovanou cenu podle pricing.conf a vypíše přehled: klient, spotřeba
   tokenů, odhadovaná cena v USD, a pokud má klient v clients.md vyplněný
@@ -259,10 +259,11 @@ FÁZE 7 — sledování spotřeby AI (Anthropic) per klient
   se zálohou DB do archivu (ať zůstane historie spotřeby i po zrušení)
 
 FÁZE 8 — self-management ops vrstvy pro budoucí přístup z mobilu
-- zabal sám sebe (ops Claude Code) do Docker kontejneru trvale běžícího
-  v agenti-net: mount /var/run/docker.sock (jen tady, u ops vrstvy — u
-  klientských claude-{klient} kontejnerů NIKDY), entrypoint co spustí
-  screen session s \`claude remote-control\`, @reboot cron jako pojistka
+- zabal sám sebe (ops Claude Code) do Docker kontejneru pojmenovaného
+  claude-code-n8n-mts, trvale běžícího v n8n-mts-net: mount
+  /var/run/docker.sock (jen tady, u ops vrstvy — u klientských
+  claude-{klient} kontejnerů NIKDY), entrypoint co spustí screen
+  session s \`claude remote-control\`, @reboot cron jako pojistka
 - ověř, že běžíš dál i po přesunu do kontejneru
 
 FÁZE 9 — test
@@ -272,7 +273,7 @@ FÁZE 9 — test
   k docker.sock ani k jiné síti než net-test1
 - v claude-test1 vyvolej aspoň jednu odpověď (např. jednoduchý dotaz),
   počkej na proběhnutí cronu (nebo ho spusť ručně) a ověř, že se
-  v /opt/agenti/clients/test1/usage.log objevil záznam a že
+  v /opt/n8n-mts/clients/test1/usage.log objevil záznam a že
   usage-report.sh test1 správně vypíše
 - ukaž mi obsah clients.md
 

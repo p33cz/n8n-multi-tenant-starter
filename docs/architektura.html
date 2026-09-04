@@ -208,9 +208,9 @@
 <div class="stage">
 
   <div class="row">
-    <div class="client-label"><b>Klient 1</b>klient1.agenti.domena.cz</div>
-    <div class="client-label"><b>Klient 2</b>klient2.agenti.domena.cz</div>
-    <div class="client-label"><b>Klient 3</b>klient3.agenti.domena.cz</div>
+    <div class="client-label"><b>Klient 1</b>klient1.n8n.domena.cz</div>
+    <div class="client-label"><b>Klient 2</b>klient2.n8n.domena.cz</div>
+    <div class="client-label"><b>Klient 3</b>klient3.n8n.domena.cz</div>
   </div>
   <div class="arrow-down">↓ HTTPS / 443</div>
 
@@ -267,7 +267,7 @@
     <div class="flow-note">↓ DB spojení jen do vlastní databáze</div>
 
     <div class="tier db">
-      <div class="tier-label">Postgres — 1 instance (agenti-net), databáze per klient</div>
+      <div class="tier-label">Postgres — 1 instance (n8n-mts-net), databáze per klient</div>
       <div class="cards">
         <div class="card"><b>db_klient1</b>user: u_klient1</div>
         <div class="card"><b>db_klient2</b>user: u_klient2</div>
@@ -276,10 +276,10 @@
     </div>
 
     <div class="tier ops">
-      <div class="tier-label">Ops vrstva — agenti-net, odděleně od všech net-{klient}</div>
+      <div class="tier-label">Ops vrstva — n8n-mts-net, odděleně od všech net-{klient}</div>
       <div class="ops-row">
         <div class="ops-main">
-          <b>claude-code-agenti (ops kontejner)</b>
+          <b>claude-code-n8n-mts (ops kontejner)</b>
           <ul>
             <li>jediný s přístupem k docker.sock</li>
             <li>zakládá/ruší klientské páry (new-client.sh / remove-client.sh)</li>
@@ -296,7 +296,7 @@
 
   </div>
 
-  <div class="mobile-user">David · <b>Claude mobile app</b> ↔ remote-control ↔ ops kontejner <i>nebo</i> kterýkoli claude-{klient} zvlášť</div>
+  <div class="mobile-user">Provozovatel · <b>Claude mobile app</b> ↔ remote-control ↔ ops kontejner <i>nebo</i> kterýkoli claude-{klient} zvlášť</div>
 
 </div>
 
