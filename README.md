@@ -74,6 +74,12 @@ Dvouvrstvý model:
   `claude-{klient}` ve vlastní izolované Docker síti `net-{klient}`.
   Klientský Claude Code mluví jen s n8n REST API svého souseda, nemá
   `docker.sock` ani přístup k jiným klientům.
+- **Appky** (nepovinné, libovolný počet na klienta) — vlastní webovky
+  klienta, spravuje je stejný `claude-{klient}` (`./scripts/new-app.sh
+  klient appka`). Appka si sama za běhu pozná, jak se spustit (vlastní
+  `start.sh`, jinak automaticky Apache s PHP), a může dostat vlastní
+  SSH deploy přístup pro externí nástroje (typicky n8n workflow) —
+  vypnutý, dokud ho výslovně nezapneš.
 
 ```mermaid
 flowchart TB

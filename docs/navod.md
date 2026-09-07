@@ -185,7 +185,7 @@ Kromě n8n může mít klient i vlastní webové appky — stará se o ně stejn
 Appka dostane vlastní kontejner ve stejné izolované síti jako klient,
 veřejnou adresu `https://jmeno-klienta-nazev-appky.<doména>` a kód appky
 sdílí s `claude-jmeno-klienta` přes `/apps/nazev-appky/code/`. Appka se
-sama za běhu podle obsahu tohodle adresáře rozhodne, jak se spustit —
+sama za běhu podle obsahu tohoto adresáře rozhodne, jak se spustit —
 nic se předem nevybírá:
 1. spustitelný `start.sh` naslouchající na portu 8080 → spustí se ten
    (vlastní kód v Node/Pythonu/cokoliv)
