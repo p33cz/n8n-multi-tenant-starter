@@ -61,6 +61,32 @@ Skript se na konci zeptá, jak má Claude Code běžet:
   nic důležitého neběží, je to rozumný kompromis — ale je to vědomá
   volba, ne výchozí chování.
 
+## Pojmenování a konvence
+
+Skripty se drží pevné konvence — užitečné vědět, než založíš prvního
+klienta, i při čtení výstupu příkazů níž. `{klient}` a `{appka}` jsou
+jména, která zadáváš skriptům; `{domena}` je doména zadaná při
+instalaci (uložená v `domain.env`).
+
+| Věc | Konvence |
+|-----|----------|
+| Subdoména klienta | `{klient}.{domena}` |
+| Subdoména appky | `{klient}-{appka}.{domena}` (plochá, ne druhá úroveň) |
+| Kontejner n8n | `n8n-{klient}` |
+| Kontejner Claude Code klienta | `claude-{klient}` |
+| Kontejner appky | `app-{klient}-{appka}` |
+| Klientská síť | `net-{klient}` (izolovaná, jen tenhle klient + Postgres) |
+| n8n host port | od **5679** výš, jen `127.0.0.1` |
+| Port appky | od **6679** výš, jen `127.0.0.1` |
+| Databáze klienta | `db_{klient}` |
+| DB uživatel | `u_{klient}` (práva jen na svou DB) |
+| Jméno klienta/appky | `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$` (malá písmena, číslice, pomlčka) |
+
+Evidence běžících klientů/appek je v `clients.md` / `apps.md` v
+`/opt/n8n-mts/`. Obsahují reálná jména klientů a doménu konkrétního
+nasazení, proto jsou úmyslně v `.gitignore` — do veřejného repa
+nepatří, skripty si je při prvním použití samy založí.
+
 ## Po dokončení — běžný provoz
 
 Po instalaci běží ops Claude Code natrvalo v kontejneru s
