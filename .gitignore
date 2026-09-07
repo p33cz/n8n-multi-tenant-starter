@@ -1,0 +1,24 @@
+# tokeny a hesla
+.env
+*.env
+postgres.env
+# (*.env výše pokrývá i domain.env — doména konkrétního nasazení, viz scripts/lib.sh)
+
+# klientská data (hesla, encryption keys, DB dumpy)
+clients/*/.env
+clients/*/backups/
+
+# provozní log spotřeby AI per klient (ceník v pricing.conf je verzovaný)
+clients/*/usage.log
+
+# provozní stav generovaný na serveru (volitelně verzuj, pokud chceš)
+master-prompt.txt
+
+# provozní data klientů (test/reální klienti) - nepatří do veřejné šablony
+clients/
+
+# živá evidence konkrétního nasazení (reálná jména klientů/appek, doména
+# v odkazech) - ne šablona; new-client.sh/new-app.sh je vytvoří/plní za běhu
+clients.md
+apps.md
+CLAUDE.md

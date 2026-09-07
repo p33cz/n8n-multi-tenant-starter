@@ -1,0 +1,31 @@
+# Šablona appky klienta. Placeholdery ${...} dosadí new-app.sh přes envsubst.
+# Appka sedí v síti net-${CLIENT} (stejná izolovaná síť jako n8n-${CLIENT} a
+# claude-${CLIENT} toho klienta), síť sem NEPATŘÍ vytvářet — vytváří ji
+# new-client.sh, tady je jen "external: true".
+name: n8n-mts-${CLIENT}-${APPKA}
+
+services:
+  app-${CLIENT}-${APPKA}:
+    image: n8n-mts/app-runtime:latest
+    container_name: app-${CLIENT}-${APPKA}
+    restart: unless-stopped
+    # ŽÁDNÝ docker.sock. Kód appky sdílí přes bind mount s claude-${CLIENT}
+    # (ten má bind mount ./apps:/apps — tahle appka sedí uvnitř na /apps/${APPKA}/code).
+    env_file:
+      - ./.env    # N8N_API_KEY appky (secret, mimo git)
+    environment:
+      CLIENT: ${CLIENT}
+      APPKA: ${APPKA}
+      N8N_API_URL: http://n8n-${CLIENT}:5678/api/v1
+    volumes:
+      - ../${APPKA}/code:/code
+    ports:
+      # Publikováno JEN na loopback — ven to vystavuje výhradně Apache vhost.
+      - "127.0.0.1:${APP_PORT}:8080"
+    networks:
+      - net-${CLIENT}
+
+networks:
+  net-${CLIENT}:
+    name: net-${CLIENT}
+    external: true

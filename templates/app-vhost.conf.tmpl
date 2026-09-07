@@ -1,0 +1,26 @@
+# Apache vhost pro appku app-${CLIENT}-${APPKA}. Vystavuje ven POUZE tuhle
+# appku (port ${APP_PORT} na loopbacku) na plochém jménu subdomény
+# ${CLIENT}-${APPKA}.<doména> — NE ${APPKA}.${CLIENT}.<doména>, druhá
+# varianta by byla druhá úroveň subdomény, kterou jednoúrovňový wildcard
+# DNS *.<doména> nepokrývá.
+# certbot --apache z tohoto vhostu vygeneruje :443 variantu (le-ssl.conf).
+<VirtualHost *:80>
+    ServerName ${SUBDOMAIN}
+
+    RewriteEngine On
+
+    # 1) HTTP → HTTPS (na :80 se spustí; na :443 je HTTPS on, takže ne)
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [R=permanent,L]
+
+    # 2) proxy na appku (reálně se uplatní až na :443 vhostu)
+    ProxyPreserveHost On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/?(.*) ws://127.0.0.1:${APP_PORT}/$1 [P,L]
+    RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+    RewriteRule ^/?(.*) http://127.0.0.1:${APP_PORT}/$1 [P,L]
+    ProxyPassReverse / http://127.0.0.1:${APP_PORT}/
+
+    ErrorLog  ${APACHE_LOG_DIR}/${CLIENT}-${APPKA}_error.log
+    CustomLog ${APACHE_LOG_DIR}/${CLIENT}-${APPKA}_access.log combined
+</VirtualHost>

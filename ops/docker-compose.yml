@@ -1,0 +1,44 @@
+# Ops stack for n8n-mts: shared Postgres (Phase 3) + ops Claude Code (Phase 8).
+# Lives on the ops-only network n8n-mts-net. Postgres is additionally attached
+# to each net-{client} network at client-provision time (see new-client.sh) so
+# client containers can reach the DB without seeing anything else on n8n-mts-net.
+name: n8n-mts-ops
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: n8n-mts-postgres
+    restart: unless-stopped
+    env_file:
+      - ../postgres.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - n8n-mts-net
+    # No published ports: DB is reachable only over docker networks.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ops-claude:
+    image: n8n-mts/ops-claude:latest
+    container_name: claude-code-n8n-mts
+    restart: unless-stopped
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # JEN ops vrstva má docker.sock
+      - /opt/n8n-mts:/workspace                       # spravuje celý stack
+      - /opt/n8n-mts/claude-auth:/auth:ro             # sdílené claude.ai přihlášení
+    networks:
+      - n8n-mts-net
+
+networks:
+  n8n-mts-net:
+    external: true
+
+volumes:
+  pgdata:
+    name: n8n-mts-pgdata

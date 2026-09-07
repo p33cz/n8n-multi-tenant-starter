@@ -1,0 +1,70 @@
+# Šablona PÁRU kontejnerů jednoho klienta. Placeholdery ${...} dosadí
+# new-client.sh přes envsubst. Oba kontejnery jsou JEN v síti net-${CLIENT}.
+# Postgres (n8n-mts-postgres) je do net-${CLIENT} připojen zvlášť skriptem
+# (docker network connect), takže klient vidí jen DB, nic jiného z ops sítě.
+name: n8n-mts-${CLIENT}
+
+services:
+  n8n-${CLIENT}:
+    image: n8nio/n8n:latest
+    container_name: n8n-${CLIENT}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: n8n-mts-postgres
+      DB_POSTGRESDB_PORT: "5432"
+      DB_POSTGRESDB_DATABASE: db_${CLIENT}
+      DB_POSTGRESDB_USER: u_${CLIENT}
+      DB_POSTGRESDB_PASSWORD: ${DB_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_HOST: ${SUBDOMAIN}
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: https
+      N8N_PROXY_HOPS: "1"
+      WEBHOOK_URL: https://${SUBDOMAIN}/
+      N8N_EDITOR_BASE_URL: https://${SUBDOMAIN}/
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      GENERIC_TIMEZONE: Europe/Prague
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      # Publikováno JEN na loopback — ven to vystavuje výhradně Apache vhost.
+      - "127.0.0.1:${N8N_PORT}:5678"
+    networks:
+      - net-${CLIENT}
+
+  claude-${CLIENT}:
+    image: n8n-mts/claude-agent:latest
+    container_name: claude-${CLIENT}
+    restart: unless-stopped
+    # ŽÁDNÝ docker.sock, ŽÁDNÝ veřejný port. Jen síť net-${CLIENT}.
+    environment:
+      CLIENT: ${CLIENT}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      N8N_API_URL: http://n8n-${CLIENT}:5678/api/v1
+      N8N_API_KEY: ${N8N_API_KEY}
+    volumes:
+      - ./:/client                       # usage.log, stav sběru spotřeby
+      - claude_workspace:/workspace      # pracovní adresář klientova agenta
+      - /opt/n8n-mts/claude-auth:/auth:ro  # sdílené claude.ai přihlášení (remote-control)
+      - ./apps:/apps                     # kód appek klienta (viz new-app.sh) — nová
+                                          # appka se objeví bez nutnosti recreate
+    depends_on:
+      - n8n-${CLIENT}
+    networks:
+      - net-${CLIENT}
+
+networks:
+  net-${CLIENT}:
+    name: net-${CLIENT}
+    external: true   # síť vytváří new-client.sh (kvůli připojení Postgresu)
+
+volumes:
+  n8n_data:
+    name: n8n-${CLIENT}-data
+  claude_workspace:
+    name: claude-${CLIENT}-workspace
