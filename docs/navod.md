@@ -184,9 +184,29 @@ Kromě n8n může mít klient i vlastní webové appky — stará se o ně stejn
 ```
 Appka dostane vlastní kontejner ve stejné izolované síti jako klient,
 veřejnou adresu `https://jmeno-klienta-nazev-appky.<doména>` a kód appky
-sdílí s `claude-jmeno-klienta` přes `/apps/nazev-appky/code/`. Appka
-naběhne, jakmile v tomhle adresáři vznikne spustitelný `start.sh`
-naslouchající na portu 8080 — do té doby běží jen placeholder stránka.
+sdílí s `claude-jmeno-klienta` přes `/apps/nazev-appky/code/`. Appka se
+sama za běhu podle obsahu tohodle adresáře rozhodne, jak se spustit —
+nic se předem nevybírá:
+1. spustitelný `start.sh` naslouchající na portu 8080 → spustí se ten
+   (vlastní kód v Node/Pythonu/cokoliv)
+2. jinak adresář obsahuje cokoli jiného → appka to servíruje sama přes
+   Apache + PHP (statické HTML/CSS i PHP fungují bez dalšího nastavení;
+   Apache navíc z principu servíruje jen známé bezpečné typy souborů —
+   viz [Bezpečnostní poznámka](#bezpečnostní-poznámka))
+3. adresář je prázdný → běží jen placeholder stránka
+
+Appka může mít i víc "webů" jako podsložky (`code/web-a/`, `code/web-b/`)
+— každá se objeví na `https://jmeno-klienta-nazev-appky.<doména>/web-a`
+atd., je to čistě otázka struktury souborů, nic se pro to nekonfiguruje.
+
+Appka standardně nemá SSH — obsah appky spravuje `claude-jmeno-klienta`
+přes bind mount výše. Pokud potřebuješ appku plnit zvenku (typicky
+n8n workflow, který sám neumí bind mount, jen SSH), zapni to zvlášť:
+```bash
+/opt/n8n-mts/scripts/enable-app-ssh.sh jmeno-klienta nazev-appky
+```
+Vypíše přihlašovací údaje (host = jméno kontejneru appky, dosažitelný
+jen z klientovy vlastní sítě, ne zvenku) k zapsání do n8n SSH credential.
 
 U klientů založených před touhle funkcí `new-app.sh` napoprvé sám
 jednorázově doplní chybějící propojení (přegeneruje a restartuje jen
@@ -236,6 +256,18 @@ Apache má navíc catch-all vhost (`000-catchall`, zakládá si ho sám
 `new-client.sh`) — bez něj by request na smazanou/neexistující
 subdoménu spadl na první vhost v pořadí a ukázal cizí n8n s cizím
 certifikátem, místo aby vrátil 404.
+
+**Appky**: appka může uvnitř mít víc "webů" jako podsložky a některé
+z nich si tam mohou ukládat podpůrná data (nastavení, hashovaná
+hesla) — ta data jsou fyzicky ve stejném adresáři, co appka servíruje
+ven, takže se nespoléhá na to, že si na jejich ochranu web/appka
+vzpomene sama. Apache appky má proto z výchozí konfigurace **allowlist**
+(servíruje jen známé bezpečné typy — HTML/CSS/JS/obrázky/fonty/PHP,
+nic jiného), ne blacklist konkrétních jmen souborů — cokoliv appka
+uloží pod jiným typem (`.json`, `.db`, bez přípony...) je nedostupné
+přes URL, ať se jmenuje jakkoli. SSH deploy přístup (`enable-app-ssh.sh`)
+je navíc vypnutý, dokud ho výslovně nezapneš, a je vždy chrootnutý jen
+na tu jednu appku.
 
 ## Poznámka k `claude remote-control`
 

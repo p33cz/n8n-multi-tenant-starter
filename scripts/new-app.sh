@@ -57,10 +57,14 @@ else
 fi
 
 # --- 2) .env appky (mimo git) ---
+# ENABLE_SSH/APP_SSH_PASSWORD jsou vypnuté defaultně — appku plní
+# claude-CLIENT přes bind mount. Zapíná se zvlášť, viz enable-app-ssh.sh.
 cat > "$ADIR/.env" <<ENV
 CLIENT=$CLIENT
 APPKA=$APPKA
 N8N_API_KEY=$APP_N8N_API_KEY
+ENABLE_SSH=0
+APP_SSH_PASSWORD=
 ENV
 chmod 600 "$ADIR/.env"
 
@@ -114,8 +118,21 @@ docker exec "claude-$CLIENT" sh -c "cat >> /workspace/CLAUDE.md" <<EOF
 
 ## Appka: $APPKA
 - Kód appky: /apps/$APPKA/code/ (sdílené s kontejnerem app-$CLIENT-$APPKA)
-- Appka nastartuje, jakmile do /apps/$APPKA/code/start.sh napíšeš spustitelný
-  skript (chmod +x), který naslouchá na portu 8080 uvnitř toho kontejneru.
+- Appka se sama za běhu podle obsahu code/ rozhodne, jak se spustit —
+  nic se nevybírá předem:
+  1. spustitelný code/start.sh naslouchající na portu 8080 → spustí se ten
+  2. jinak code/ obsahuje cokoli → appka to servíruje sama přes Apache (PHP
+     i statické HTML/CSS fungují bez dalšího nastavení); Apache servíruje
+     jen známé bezpečné typy souborů (HTML/CSS/JS/obrázky/fonty/PHP), cokoli
+     jiného (.json, .db, bez přípony...) přes URL nedostupné, ať se appka
+     jmenuje jakkoli — necháš tam klidně nastavení/hesla, nejsou stažitelná
+  3. code/ je prázdný → běží jen placeholder
+  Appka může mít víc "webů" jako podsložky (code/web-a/, code/web-b/) —
+  každá se objeví na https://$APP_SUBDOMAIN/web-a atd., čistě podle struktury
+  souborů, nic se pro to nekonfiguruje.
+- Appka standardně nemá SSH (spravuješ ji ty přes tenhle bind mount). Pokud
+  ji potřebuje plnit něco zvenku (typicky n8n workflow), zapni to:
+  scripts/enable-app-ssh.sh $CLIENT $APPKA
 - Veřejná adresa: https://$APP_SUBDOMAIN
 - n8n API téhle appky (pokud ho appka sama potřebuje): stejné \$N8N_API_URL
   jako máš ty, appka má svůj vlastní N8N_API_KEY (jiný než tvůj).
