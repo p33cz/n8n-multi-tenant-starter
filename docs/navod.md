@@ -232,6 +232,11 @@ prompty, nedůvěryhodná data ke zpracování).
 Klientské `claude-{klient}` kontejnery `docker.sock` mít nesmí — to je
 jádro izolace mezi klienty.
 
+Apache má navíc catch-all vhost (`000-catchall`, zakládá si ho sám
+`new-client.sh`) — bez něj by request na smazanou/neexistující
+subdoménu spadl na první vhost v pořadí a ukázal cizí n8n s cizím
+certifikátem, místo aby vrátil 404.
+
 ## Poznámka k `claude remote-control`
 
 `claude remote-control` (ovládání Claude Code z mobilu) funguje jen po

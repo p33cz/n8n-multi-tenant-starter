@@ -12,6 +12,7 @@ CLIENT="${1:-}"
 validate_name "$CLIENT"
 ensure_dirs
 ensure_clients_md
+ensure_catchall_vhost
 client_exists "$CLIENT" && die "Klient '$CLIENT' už existuje v clients.md."
 docker ps -a --format '{{.Names}}' | grep -qx "n8n-$CLIENT" && die "Kontejner n8n-$CLIENT už existuje."
 

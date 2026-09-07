@@ -229,6 +229,12 @@ FÁZE 5 — šablony a konvence
   docker compose
 - šablona Apache VirtualHostu (HTTPS + websocket proxy pro n8n editor) —
   vystavuje ven POUZE n8n-{klient}, claude-{klient} nemá žádný veřejný port
+- DŮLEŽITÉ: name-based vhosting v Apache znamená, že request na subdoménu,
+  co nesedí na ŽÁDNÝ ServerName (smazaný klient, náhodná subdoména pod
+  wildcardem), jinak spadne na první vhost v pořadí a ukáže cizí n8n s
+  cizím certifikátem — vytvoř JEDNOU explicitní catch-all vhost
+  (`<VirtualHost _default_:80>` a `_default_:443`, vlastní self-signed
+  cert) vracející 404, ať tohle nikdy nemůže nastat
 - DŮLEŽITÉ: /opt/n8n-mts je git repozitář napojený na veřejný GitHub. Doména
   (${DOMAIN}) a jakákoli jiná specifika tohoto nasazení (skutečná IP, reálná
   jména klientů) NESMÍ být natvrdo v souborech, které skončí commitnuté —

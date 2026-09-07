@@ -63,6 +63,44 @@ psql_super() { docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgre
 
 ensure_dirs() { mkdir -p "$CLIENTS_DIR" "$ARCHIVE_DIR" "$ROOT/claude-auth"; }
 
+# Apache name-based vhosting: request na subdoménu, která nesedí na ŽÁDNÝ
+# ServerName (smazaný/neexistující klient, náhodná subdoména pod wildcardem),
+# jinak spadne na první vhost v pořadí a ukáže tak cizí n8n s cizím
+# certifikátem. _default_ vhost s vlastním self-signed certem tohle zachytí
+# a vrátí 404 — nikdy neprozradí obsah reálného klienta. Idempotentní,
+# bezpečné volat opakovaně (z new-client.sh, aby se to samo doplnilo i na
+# už rozjetých instalacích).
+ensure_catchall_vhost() {
+  local conf="/etc/apache2/sites-available/000-catchall.conf"
+  local cert="/etc/n8n-mts-catchall.pem" key="/etc/n8n-mts-catchall.key"
+  if [ ! -f "$conf" ]; then
+    if [ ! -f "$cert" ] || [ ! -f "$key" ]; then
+      openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+        -subj "/CN=catchall.invalid" -keyout "$key" -out "$cert" >/dev/null 2>&1
+      chmod 600 "$key"
+    fi
+    cat > "$conf" <<EOF
+# Zachytávací vhost — cokoli, co nesedí na žádného konkrétního klienta,
+# NESMÍ spadnout na prvního abecedně vhosta a ukázat tak cizí n8n.
+# _default_ se použije, jen když nic jiného nesedí.
+<VirtualHost _default_:80>
+    ServerName catchall.invalid
+    Redirect 404 /
+</VirtualHost>
+
+<VirtualHost _default_:443>
+    ServerName catchall.invalid
+    SSLEngine on
+    SSLCertificateFile $cert
+    SSLCertificateKeyFile $key
+    Redirect 404 /
+</VirtualHost>
+EOF
+  fi
+  a2ensite 000-catchall >/dev/null 2>&1
+  apache2ctl configtest 2>/dev/null && systemctl reload apache2 2>/dev/null || true
+}
+
 # clients.md/apps.md jsou živá evidence konkrétního nasazení (mimo git, viz
 # .gitignore) — pokud chybí (čerstvá instalace, nebo poprvé se zakládá appka),
 # vytvoř je s hlavičkou, ať na tom skripty nejsou závislé jen jednorázově.
