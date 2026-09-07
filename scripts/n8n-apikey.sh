@@ -29,13 +29,16 @@ done
 # 3) vytvoř API klíč — retry, dokud n8n plně nenaběhne ("n8n is starting up").
 # scopes si stáhneme dynamicky z /rest/api-keys/scopes (liší se dle verze/edice);
 # novější n8n vyžaduje scopes (pole) i expiresAt.
+# healthz bývá zelený dřív, než je tenhle endpoint plně připravený — v praxi
+# to umí trvat přes minutu, proto 40 pokusů (~2 min), ne 20 (~1 min).
 RESP=""; KEY=""
-for attempt in $(seq 1 20); do
+ATTEMPTS=40
+for attempt in $(seq 1 "$ATTEMPTS"); do
   # aktuální platné scopes této instance (JSON pole); prázdné dokud n8n startuje
   SCOPES_JSON="$(curl -fsS -c "$JAR" -b "$JAR" "$BASE/rest/api-keys/scopes" 2>/dev/null \
                  | jq -c '.data // .' 2>/dev/null || true)"
   if [ -z "$SCOPES_JSON" ] || ! printf '%s' "$SCOPES_JSON" | jq -e 'type=="array" and length>0' >/dev/null 2>&1; then
-    log "n8n ještě nastartovává (pokus $attempt/20), čekám 3s…"
+    log "n8n ještě nastartovává (pokus $attempt/$ATTEMPTS), čekám 3s…"
     sleep 3
     curl -fsS -c "$JAR" -b "$JAR" -X POST "$BASE/rest/login" -H 'Content-Type: application/json' \
       -d "{\"emailOrLdapLoginId\":\"$EMAIL\",\"password\":\"$PASS\"}" >/dev/null 2>&1 || true
