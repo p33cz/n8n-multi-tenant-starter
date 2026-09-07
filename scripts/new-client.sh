@@ -97,7 +97,7 @@ ok "n8n běží"
 
 # --- 7) n8n API klíč scoped na tuto instanci ---
 say "Zakládám vlastníka a n8n API klíč"
-N8N_API_KEY="$("$DIR/n8n-apikey.sh" "$BASE" "$OWNER_EMAIL" "$OWNER_PASSWORD" || true)"
+N8N_API_KEY="$("$DIR/n8n-apikey.sh" "$BASE" "$OWNER_EMAIL" "$OWNER_PASSWORD" "ops-provisioned-claude-$CLIENT" || true)"
 if [ -n "$N8N_API_KEY" ]; then
   sed -i "s|^N8N_API_KEY=.*|N8N_API_KEY=$N8N_API_KEY|" "$CDIR/.env"
   ok "n8n API klíč vytvořen a uložen do .env"

@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# n8n-apikey.sh <base_url> <owner_email> <owner_password>
+# n8n-apikey.sh <base_url> <owner_email> <owner_password> [label]
 # Založí vlastníka (první běh), přihlásí se a vytvoří n8n public API klíč
 # scoped na tuto jednu instanci. Klíč vypíše na stdout; diagnostiku na stderr.
+#
+# [label] je nepovinný — když appka žádá o druhý klíč pro TÉHOŽ vlastníka
+# (n8n-{klient} owner sdílený mezi claude-{klient} a jeho appkami), musí mít
+# každý klíč jiný label, jinak ho n8n odmítne jako duplicitní.
 set -euo pipefail
-BASE="$1"; EMAIL="$2"; PASS="$3"
+BASE="$1"; EMAIL="$2"; PASS="$3"; LABEL="${4:-ops-provisioned}"
 JAR="$(mktemp)"; trap 'rm -f "$JAR"' EXIT
 
 log() { echo "[n8n-apikey] $*" >&2; }
@@ -45,10 +49,10 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     continue
   fi
   # sestav tělo požadavku s label + všemi scopes + expiresAt:null
-  BODY="$(jq -cn --argjson sc "$SCOPES_JSON" '{label:"ops-provisioned", scopes:$sc, expiresAt:null}')"
+  BODY="$(jq -cn --arg l "$LABEL" --argjson sc "$SCOPES_JSON" '{label:$l, scopes:$sc, expiresAt:null}')"
   for b in "$BODY" \
-           "$(jq -cn --argjson sc "$SCOPES_JSON" '{label:"ops-provisioned", scopes:$sc}')" \
-           '{"label":"ops-provisioned"}'; do
+           "$(jq -cn --arg l "$LABEL" --argjson sc "$SCOPES_JSON" '{label:$l, scopes:$sc}')" \
+           "$(jq -cn --arg l "$LABEL" '{label:$l}')"; do
     RESP="$(curl -fsS -c "$JAR" -b "$JAR" -X POST "$BASE/rest/api-keys" \
             -H 'Content-Type: application/json' -d "$b" 2>/dev/null || true)"
     printf '%s' "$RESP" | grep -qi 'starting up' && { RESP=""; continue; }

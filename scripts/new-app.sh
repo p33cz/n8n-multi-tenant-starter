@@ -49,7 +49,7 @@ mkdir -p "$ADIR/code"
 
 # --- 1) n8n API klíč pro appku (vlastní, ne sdílený s claude-{klient}) ---
 say "Vytvářím appce vlastní n8n API klíč"
-APP_N8N_API_KEY="$("$DIR/n8n-apikey.sh" "http://127.0.0.1:$N8N_PORT" "$N8N_OWNER_EMAIL" "$N8N_OWNER_PASSWORD" || true)"
+APP_N8N_API_KEY="$("$DIR/n8n-apikey.sh" "http://127.0.0.1:$N8N_PORT" "$N8N_OWNER_EMAIL" "$N8N_OWNER_PASSWORD" "ops-provisioned-appka-$CLIENT-$APPKA" || true)"
 if [ -n "$APP_N8N_API_KEY" ]; then
   ok "API klíč pro appku vytvořen"
 else
