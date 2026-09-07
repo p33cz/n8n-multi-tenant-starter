@@ -19,6 +19,16 @@ ADIR="$ARCHIVE_DIR/${CLIENT}-${STAMP}"
 client_exists "$CLIENT" || warn "Klient '$CLIENT' není v clients.md — pokusím se uklidit i tak."
 mkdir -p "$ADIR"
 
+# --- 0) nejdřív zruš všechny appky klienta ---
+# Jinak zůstanou osiřelé (kontejner běží dál, vhost visí) a síť net-{klient}
+# se ani nedá smazat, dokud v ní appka běží.
+if [ -f "$APPS_MD" ]; then
+  for APPKA in $(awk -F'|' -v c="$CLIENT" '{gsub(/^[ \t]+|[ \t]+$/,"",$2); gsub(/^[ \t]+|[ \t]+$/,"",$3); if ($2==c) print $3}' "$APPS_MD"); do
+    say "Klient má appku '$APPKA' — ruším ji nejdřív"
+    "$DIR/remove-app.sh" "$CLIENT" "$APPKA" || warn "remove-app.sh selhal pro appku '$APPKA'"
+  done
+fi
+
 # --- 1) záloha DB dumpem ---
 if docker exec "$PG_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then
   say "Zálohuji databázi $DB → $ADIR/$DB.sql.gz"
