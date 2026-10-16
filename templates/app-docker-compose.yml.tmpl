@@ -1,0 +1,33 @@
+# Template for a client's app. Placeholders ${...} are filled in by
+# new-app.sh via envsubst. The app sits in network net-${CLIENT} (the
+# same isolated network as that client's n8n-${CLIENT} and
+# claude-${CLIENT}) — this file does NOT create that network, that's
+# done by new-client.sh, here it's just "external: true".
+name: n8n-mts-${CLIENT}-${APPKA}
+
+services:
+  app-${CLIENT}-${APPKA}:
+    image: n8n-mts/app-runtime:latest
+    container_name: app-${CLIENT}-${APPKA}
+    restart: unless-stopped
+    # NO docker.sock. The app's code is shared with claude-${CLIENT} via a
+    # bind mount (it has ./apps:/apps — this app lives inside at /apps/${APPKA}/code).
+    env_file:
+      - ./.env    # the app's N8N_API_KEY (secret, outside git)
+    environment:
+      CLIENT: ${CLIENT}
+      APPKA: ${APPKA}
+      N8N_API_URL: http://n8n-${CLIENT}:5678/api/v1
+      N8N_MTS_LANG: ${N8N_MTS_LANG}
+    volumes:
+      - ../${APPKA}/code:/code
+    ports:
+      # Published ONLY on loopback — the Apache vhost is what exposes it externally.
+      - "127.0.0.1:${APP_PORT}:8080"
+    networks:
+      - net-${CLIENT}
+
+networks:
+  net-${CLIENT}:
+    name: net-${CLIENT}
+    external: true

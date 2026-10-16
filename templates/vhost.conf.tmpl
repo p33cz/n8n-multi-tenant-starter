@@ -1,0 +1,26 @@
+# Apache vhost for n8n-${CLIENT}. Exposes ONLY the n8n editor (port
+# ${N8N_PORT} on loopback). claude-${CLIENT} has no public port.
+# certbot --apache generates a :443 variant (le-ssl.conf) from this vhost.
+# We handle the redirect to HTTPS ourselves via an "HTTPS off" condition —
+# that stays safe even after being copied into the :443 vhost (there
+# HTTPS is on → the redirect doesn't fire, no loop).
+<VirtualHost *:80>
+    ServerName ${SUBDOMAIN}
+
+    RewriteEngine On
+
+    # 1) HTTP → HTTPS (fires on :80; on :443 HTTPS is already on, so it doesn't)
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [R=permanent,L]
+
+    # 2) proxy to n8n (really only kicks in on the :443 vhost)
+    ProxyPreserveHost On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/?(.*) ws://127.0.0.1:${N8N_PORT}/$1 [P,L]
+    RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+    RewriteRule ^/?(.*) http://127.0.0.1:${N8N_PORT}/$1 [P,L]
+    ProxyPassReverse / http://127.0.0.1:${N8N_PORT}/
+
+    ErrorLog  ${APACHE_LOG_DIR}/${CLIENT}_error.log
+    CustomLog ${APACHE_LOG_DIR}/${CLIENT}_access.log combined
+</VirtualHost>

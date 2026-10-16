@@ -1,0 +1,72 @@
+# Template for a client's container PAIR. Placeholders ${...} are
+# filled in by new-client.sh via envsubst. Both containers are ONLY in
+# network net-${CLIENT}. Postgres (n8n-mts-postgres) is connected into
+# net-${CLIENT} separately by a script (docker network connect), so
+# the client only sees the DB, nothing else from the ops network.
+name: n8n-mts-${CLIENT}
+
+services:
+  n8n-${CLIENT}:
+    image: n8nio/n8n:latest
+    container_name: n8n-${CLIENT}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: n8n-mts-postgres
+      DB_POSTGRESDB_PORT: "5432"
+      DB_POSTGRESDB_DATABASE: db_${CLIENT}
+      DB_POSTGRESDB_USER: u_${CLIENT}
+      DB_POSTGRESDB_PASSWORD: ${DB_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_HOST: ${SUBDOMAIN}
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: https
+      N8N_PROXY_HOPS: "1"
+      WEBHOOK_URL: https://${SUBDOMAIN}/
+      N8N_EDITOR_BASE_URL: https://${SUBDOMAIN}/
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      GENERIC_TIMEZONE: Europe/Prague
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      # Published ONLY on loopback — the Apache vhost is what exposes it externally.
+      - "127.0.0.1:${N8N_PORT}:5678"
+    networks:
+      - net-${CLIENT}
+
+  claude-${CLIENT}:
+    image: n8n-mts/claude-agent:latest
+    container_name: claude-${CLIENT}
+    restart: unless-stopped
+    # NO docker.sock, NO public port. Only network net-${CLIENT}.
+    environment:
+      CLIENT: ${CLIENT}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      N8N_API_URL: http://n8n-${CLIENT}:5678/api/v1
+      N8N_API_KEY: ${N8N_API_KEY}
+      N8N_MTS_LANG: ${N8N_MTS_LANG}
+    volumes:
+      - ./:/client                       # usage.log, usage-collection state
+      - claude_workspace:/workspace      # the client agent's working directory
+      - /opt/n8n-mts/claude-auth:/auth:ro  # shared claude.ai login (remote-control)
+      - ./apps:/apps                     # the client's app code (see new-app.sh) — a new
+                                          # app shows up without a recreate being needed
+    depends_on:
+      - n8n-${CLIENT}
+    networks:
+      - net-${CLIENT}
+
+networks:
+  net-${CLIENT}:
+    name: net-${CLIENT}
+    external: true   # new-client.sh creates the network (to connect Postgres into it)
+
+volumes:
+  n8n_data:
+    name: n8n-${CLIENT}-data
+  claude_workspace:
+    name: claude-${CLIENT}-workspace

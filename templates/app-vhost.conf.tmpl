@@ -1,0 +1,26 @@
+# Apache vhost for app app-${CLIENT}-${APPKA}. Exposes ONLY this app
+# (port ${APP_PORT} on loopback) under a flat subdomain name
+# ${CLIENT}-${APPKA}.<domain> — NOT ${APPKA}.${CLIENT}.<domain>; the
+# latter would be a second subdomain level, which a single-level
+# wildcard DNS *.<domain> doesn't cover.
+# certbot --apache generates a :443 variant (le-ssl.conf) from this vhost.
+<VirtualHost *:80>
+    ServerName ${SUBDOMAIN}
+
+    RewriteEngine On
+
+    # 1) HTTP → HTTPS (fires on :80; on :443 HTTPS is already on, so it doesn't)
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [R=permanent,L]
+
+    # 2) proxy to the app (really only kicks in on the :443 vhost)
+    ProxyPreserveHost On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/?(.*) ws://127.0.0.1:${APP_PORT}/$1 [P,L]
+    RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+    RewriteRule ^/?(.*) http://127.0.0.1:${APP_PORT}/$1 [P,L]
+    ProxyPassReverse / http://127.0.0.1:${APP_PORT}/
+
+    ErrorLog  ${APACHE_LOG_DIR}/${CLIENT}-${APPKA}_error.log
+    CustomLog ${APACHE_LOG_DIR}/${CLIENT}-${APPKA}_access.log combined
+</VirtualHost>

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# remove-client.sh <name> — removes a client:
+#   dumps the DB to the archive, moves usage.log to the archive (usage
+#   history is kept), stops+removes both containers, disconnects
+#   Postgres from the network, removes the network, drops the DB+user,
+#   removes the Apache vhost, drops the row from clients.md.
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$DIR/lib.sh"
+require_root
+
+MSG_CS[remove_client.usage]='Použití: remove-client.sh <jmeno>'
+MSG_EN[remove_client.usage]='Usage: remove-client.sh <name>'
+MSG_CS[remove_client.not_in_md]="Klient '%s' není v clients.md — pokusím se uklidit i tak."
+MSG_EN[remove_client.not_in_md]="Client '%s' isn't in clients.md — I'll try to clean up anyway."
+MSG_CS[remove_client.has_app]="Klient má appku '%s' — ruším ji nejdřív"
+MSG_EN[remove_client.has_app]="Client has app '%s' — removing it first"
+MSG_CS[remove_client.app_remove_failed]="remove-app.sh selhal pro appku '%s'"
+MSG_EN[remove_client.app_remove_failed]="remove-app.sh failed for app '%s'"
+MSG_CS[remove_client.backing_up_db]='Zálohuji databázi %s → %s'
+MSG_EN[remove_client.backing_up_db]='Backing up database %s → %s'
+MSG_CS[remove_client.pgdump_failed]='pg_dump selhal (DB možná neexistuje)'
+MSG_EN[remove_client.pgdump_failed]="pg_dump failed (the DB may not exist)"
+MSG_CS[remove_client.usage_log_moved]='usage.log přesunut do archivu (historie spotřeby zachována)'
+MSG_EN[remove_client.usage_log_moved]='usage.log moved to the archive (usage history kept)'
+MSG_CS[remove_client.stopping_containers]='Zastavuji a mažu kontejnery klienta'
+MSG_EN[remove_client.stopping_containers]="Stopping and removing the client's containers"
+MSG_CS[remove_client.network_removed]='Síť %s odstraněna'
+MSG_EN[remove_client.network_removed]='Network %s removed'
+MSG_CS[remove_client.drop_db_failed]='DROP DATABASE %s selhal'
+MSG_EN[remove_client.drop_db_failed]='DROP DATABASE %s failed'
+MSG_CS[remove_client.db_removed]='DB %s a uživatel %s smazáni'
+MSG_EN[remove_client.db_removed]='DB %s and user %s removed'
+MSG_CS[remove_client.vhost_removed]='Apache vhost odstraněn (certifikát v /etc/letsencrypt ponechán)'
+MSG_EN[remove_client.vhost_removed]='Apache vhost removed (certificate kept in /etc/letsencrypt)'
+MSG_CS[remove_client.done]="Klient '%s' zrušen. Archiv (DB dump + usage.log): %s"
+MSG_EN[remove_client.done]="Client '%s' removed. Archive (DB dump + usage.log): %s"
+
+CLIENT="${1:-}"
+[ -n "$CLIENT" ] || die "$(msg remove_client.usage)"
+validate_name "$CLIENT"
+CDIR="$CLIENTS_DIR/$CLIENT"
+NET="net-$CLIENT"; DB="db_$CLIENT"; DBUSER="u_$CLIENT"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+ADIR="$ARCHIVE_DIR/${CLIENT}-${STAMP}"
+
+client_exists "$CLIENT" || warn "$(msg remove_client.not_in_md "$CLIENT")"
+mkdir -p "$ADIR"
+
+# --- 0) remove all of the client's apps first ---
+# Otherwise they'd be left orphaned (container keeps running, vhost
+# stays) and net-{client} couldn't even be removed while an app is
+# still connected to it.
+if [ -f "$APPS_MD" ]; then
+  for APPKA in $(awk -F'|' -v c="$CLIENT" '{gsub(/^[ \t]+|[ \t]+$/,"",$2); gsub(/^[ \t]+|[ \t]+$/,"",$3); if ($2==c) print $3}' "$APPS_MD"); do
+    say "$(msg remove_client.has_app "$APPKA")"
+    "$DIR/remove-app.sh" "$CLIENT" "$APPKA" || warn "$(msg remove_client.app_remove_failed "$APPKA")"
+  done
+fi
+
+# --- 1) back up via a DB dump ---
+if docker exec "$PG_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then
+  say "$(msg remove_client.backing_up_db "$DB" "$ADIR/$DB.sql.gz")"
+  docker exec "$PG_CONTAINER" pg_dump -U postgres "$DB" 2>/dev/null | gzip > "$ADIR/$DB.sql.gz" || warn "$(msg remove_client.pgdump_failed)"
+fi
+
+# --- 2) do NOT delete usage.log — move it to the archive ---
+if [ -f "$CDIR/usage.log" ]; then
+  mv "$CDIR/usage.log" "$ADIR/usage.log"
+  ok "$(msg remove_client.usage_log_moved)"
+fi
+[ -f "$CDIR/.env" ] && cp "$CDIR/.env" "$ADIR/.env.bak" || true
+
+# --- 3) stop and remove containers + volumes ---
+if [ -f "$CDIR/docker-compose.yml" ]; then
+  say "$(msg remove_client.stopping_containers)"
+  ( cd "$CDIR" && docker compose down -v >/dev/null 2>&1 ) || true
+fi
+docker rm -f "n8n-$CLIENT" "claude-$CLIENT" >/dev/null 2>&1 || true
+
+# --- 4) disconnect Postgres from the network and remove the network ---
+docker network disconnect "$NET" "$PG_CONTAINER" >/dev/null 2>&1 || true
+docker network rm "$NET" >/dev/null 2>&1 || true
+ok "$(msg remove_client.network_removed "$NET")"
+
+# --- 5) drop DB + user ---
+if docker exec "$PG_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then
+  psql_super -c "DROP DATABASE IF EXISTS $DB;" >/dev/null 2>&1 || warn "$(msg remove_client.drop_db_failed "$DB")"
+  psql_super -c "DROP ROLE IF EXISTS $DBUSER;" >/dev/null 2>&1 || true
+  ok "$(msg remove_client.db_removed "$DB" "$DBUSER")"
+fi
+
+# --- 6) Apache vhost ---
+if [ -f "/etc/apache2/sites-available/$CLIENT.conf" ]; then
+  a2dissite "$CLIENT.conf" >/dev/null 2>&1 || true
+  rm -f "/etc/apache2/sites-available/$CLIENT.conf" "/etc/apache2/sites-available/$CLIENT-le-ssl.conf"
+  systemctl reload apache2 2>/dev/null || true
+  ok "$(msg remove_client.vhost_removed)"
+fi
+
+# --- 7) drop from clients.md, archive the client directory ---
+if [ -f "$CLIENTS_MD" ]; then
+  grep -v "^| $CLIENT " "$CLIENTS_MD" > "$CLIENTS_MD.tmp" && mv "$CLIENTS_MD.tmp" "$CLIENTS_MD"
+fi
+if [ -d "$CDIR" ]; then
+  mv "$CDIR" "$ADIR/client-dir" 2>/dev/null || rm -rf "$CDIR"
+fi
+
+echo
+ok "$(msg remove_client.done "$CLIENT" "$ADIR")"

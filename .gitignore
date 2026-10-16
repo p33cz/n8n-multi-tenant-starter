@@ -1,0 +1,30 @@
+# tokens and passwords
+.env
+*.env
+postgres.env
+# (*.env above also covers domain.env — the domain for a specific deployment, see scripts/lib.sh)
+
+# client data (passwords, encryption keys, DB dumps)
+clients/*/.env
+clients/*/backups/
+
+# per-client AI usage log (the pricing in pricing.conf is versioned)
+clients/*/usage.log
+
+# runtime state generated on the server (version it if you want to)
+master-prompt.txt
+
+# client runtime data (test/real clients) - doesn't belong in the public template
+clients/
+
+# live record of a specific deployment (real client/app names, the
+# domain in links) - not a template; new-client.sh/new-app.sh create/fill it at runtime
+clients.md
+apps.md
+
+# live operational conventions for a specific deployment (real domain, ports...) —
+# written there by the ops Claude Code during install (bootstrap.sh).
+# The root CLAUDE.md, by contrast, is generic and IS committed (orientation
+# for anyone starting work on this repo) — it pulls in OPS.md itself via
+# the @OPS.md line, if it exists on a given deployment.
+OPS.md
