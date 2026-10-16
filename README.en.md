@@ -145,7 +145,8 @@ docs/architektura.html     — architecture diagram (Czech)
 docs/architecture.en.html  — architecture diagram (English)
 scripts/                   — provisioning scripts: new-client.sh, remove-client.sh,
                               new-app.sh, remove-app.sh, enable-app-ssh.sh,
-                              usage-report.sh, n8n-apikey.sh, lib.sh (shared functions)
+                              backup-clients.sh, usage-report.sh, n8n-apikey.sh,
+                              deploy-ops.sh, lib.sh (shared functions)
 templates/                 — docker-compose.yml and Apache vhost templates
                               for clients and apps (envsubst, secrets kept out of git)
 docker/                    — Dockerfiles: ops container, claude-agent (per client),

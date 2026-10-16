@@ -137,7 +137,8 @@ docs/navod.md              — psaný návod k celému postupu, krok za krokem
 docs/architektura.html     — grafický diagram architektury
 scripts/                   — provisioning skripty: new-client.sh, remove-client.sh,
                               new-app.sh, remove-app.sh, enable-app-ssh.sh,
-                              usage-report.sh, n8n-apikey.sh, lib.sh (sdílené funkce)
+                              backup-clients.sh, usage-report.sh, n8n-apikey.sh,
+                              deploy-ops.sh, lib.sh (sdílené funkce)
 templates/                 — šablony docker-compose.yml a Apache vhostů
                               pro klienty i appky (envsubst, secrety mimo git)
 docker/                    — Dockerfily: ops kontejner, claude-agent (per klient),

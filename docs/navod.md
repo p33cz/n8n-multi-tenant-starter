@@ -260,8 +260,10 @@ klienta" — ten přepíše prázdnou DB a výchozí soubory obsahem ze zálohy.
 /opt/n8n-mts/scripts/remove-client.sh jmeno-klienta
 ```
 
-Před smazáním se udělá dump databáze a `usage.log` se přesune do
-archivu — historie spotřeby zůstane dohledatelná i po zrušení klienta.
+Před smazáním se udělá plná záloha (stejná jako automatická, viz
+"Zálohy a obnova" výše) a `usage.log` se přesune do archivu — historie
+spotřeby zůstane dohledatelná i po zrušení klienta. Archiv najdeš v
+`archive/{klient}-{datum}/`.
 
 ### Správa appek klienta
 

@@ -274,9 +274,10 @@ the backup's content.
 /opt/n8n-mts/scripts/remove-client.sh client-name
 ```
 
-Before deletion a database dump is taken and `usage.log` is moved to
-the archive — the usage history stays traceable even after the client
-is removed.
+Before deletion a full backup is taken (the same kind as the automatic
+one, see "Backups and restore" above) and `usage.log` is moved to the
+archive — the usage history stays traceable even after the client is
+removed. The archive lands in `archive/{client}-{date}/`.
 
 ### Managing a client's apps
 

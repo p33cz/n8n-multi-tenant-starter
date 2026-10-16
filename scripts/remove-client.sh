@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # remove-client.sh <name> — removes a client:
-#   dumps the DB to the archive, moves usage.log to the archive (usage
-#   history is kept), stops+removes both containers, disconnects
-#   Postgres from the network, removes the network, drops the DB+user,
-#   removes the Apache vhost and its Let's Encrypt certificate, drops
-#   the row from clients.md.
+#   takes a full backup (DB + files + volumes, via backup-clients.sh)
+#   and moves usage.log to the archive (usage history is kept),
+#   stops+removes both containers, disconnects Postgres from the
+#   network, removes the network, drops the DB+user, removes the
+#   Apache vhost and its Let's Encrypt certificate, drops the row
+#   from clients.md.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/lib.sh"
@@ -18,10 +19,10 @@ MSG_CS[remove_client.has_app]="Klient má appku '%s' — ruším ji nejdřív"
 MSG_EN[remove_client.has_app]="Client has app '%s' — removing it first"
 MSG_CS[remove_client.app_remove_failed]="remove-app.sh selhal pro appku '%s'"
 MSG_EN[remove_client.app_remove_failed]="remove-app.sh failed for app '%s'"
-MSG_CS[remove_client.backing_up_db]='Zálohuji databázi %s → %s'
-MSG_EN[remove_client.backing_up_db]='Backing up database %s → %s'
-MSG_CS[remove_client.pgdump_failed]='pg_dump selhal (DB možná neexistuje)'
-MSG_EN[remove_client.pgdump_failed]="pg_dump failed (the DB may not exist)"
+MSG_CS[remove_client.backing_up]='Zálohuji klienta %s před zrušením (DB + soubory + volumes)'
+MSG_EN[remove_client.backing_up]='Backing up client %s before removal (DB + files + volumes)'
+MSG_CS[remove_client.backup_failed]='Záloha před zrušením selhala — pokračuji i tak, ale zkontroluj archiv ručně'
+MSG_EN[remove_client.backup_failed]="Backup before removal failed — continuing anyway, but check the archive by hand"
 MSG_CS[remove_client.usage_log_moved]='usage.log přesunut do archivu (historie spotřeby zachována)'
 MSG_EN[remove_client.usage_log_moved]='usage.log moved to the archive (usage history kept)'
 MSG_CS[remove_client.stopping_containers]='Zastavuji a mažu kontejnery klienta'
@@ -40,8 +41,8 @@ MSG_CS[remove_client.cert_removed]='Certifikát %s smazán (certbot delete)'
 MSG_EN[remove_client.cert_removed]='Certificate %s removed (certbot delete)'
 MSG_CS[remove_client.cert_remove_failed]='certbot delete pro %s selhalo — zkontroluj ručně (certbot certificates)'
 MSG_EN[remove_client.cert_remove_failed]='certbot delete for %s failed — check manually (certbot certificates)'
-MSG_CS[remove_client.done]="Klient '%s' zrušen. Archiv (DB dump + usage.log): %s"
-MSG_EN[remove_client.done]="Client '%s' removed. Archive (DB dump + usage.log): %s"
+MSG_CS[remove_client.done]="Klient '%s' zrušen. Archiv (plná záloha + usage.log): %s"
+MSG_EN[remove_client.done]="Client '%s' removed. Archive (full backup + usage.log): %s"
 
 CLIENT="${1:-}"
 [ -n "$CLIENT" ] || die "$(msg remove_client.usage)"
@@ -65,11 +66,14 @@ if [ -f "$APPS_MD" ]; then
   done
 fi
 
-# --- 1) back up via a DB dump ---
-if docker exec "$PG_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then
-  say "$(msg remove_client.backing_up_db "$DB" "$ADIR/$DB.sql.gz")"
-  docker exec "$PG_CONTAINER" pg_dump -U postgres "$DB" 2>/dev/null | gzip > "$ADIR/$DB.sql.gz" || warn "$(msg remove_client.pgdump_failed)"
-fi
+# --- 1) full backup before anything is stopped/torn down ---
+# Reuses backup-clients.sh so a removed client's archive has the same
+# content as a routine backup (DB + app code + docker volumes), not
+# just a DB dump — it writes into $CDIR/backups/, which step 7 below
+# carries into the archive along with the rest of $CDIR. Must run
+# before step 3 (`docker compose down -v` deletes the volumes).
+say "$(msg remove_client.backing_up "$CLIENT")"
+"$DIR/backup-clients.sh" "$CLIENT" || warn "$(msg remove_client.backup_failed)"
 
 # --- 2) do NOT delete usage.log — move it to the archive ---
 if [ -f "$CDIR/usage.log" ]; then
