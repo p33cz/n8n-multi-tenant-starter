@@ -34,6 +34,8 @@ MSG_CS[remove_client.db_removed]='DB %s a uživatel %s smazáni'
 MSG_EN[remove_client.db_removed]='DB %s and user %s removed'
 MSG_CS[remove_client.vhost_removed]='Apache vhost odstraněn'
 MSG_EN[remove_client.vhost_removed]='Apache vhost removed'
+MSG_CS[remove_client.configtest_failed]='apache2ctl configtest selhal po úklidu vhostu — reload přeskočen, zkontroluj ručně'
+MSG_EN[remove_client.configtest_failed]='apache2ctl configtest failed after vhost cleanup — reload skipped, check manually'
 MSG_CS[remove_client.cert_removed]='Certifikát %s smazán (certbot delete)'
 MSG_EN[remove_client.cert_removed]='Certificate %s removed (certbot delete)'
 MSG_CS[remove_client.cert_remove_failed]='certbot delete pro %s selhalo — zkontroluj ručně (certbot certificates)'
@@ -96,16 +98,27 @@ if docker exec "$PG_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then
 fi
 
 # --- 6) Apache vhost ---
-if [ -f "/etc/apache2/sites-available/$CLIENT.conf" ]; then
-  a2dissite "$CLIENT.conf" >/dev/null 2>&1 || true
-  # certbot's apache plugin enables its own *-le-ssl.conf site alongside
-  # the http one above — dissite it too, or deleting its sites-available
-  # file below leaves a dangling symlink in sites-enabled/ (found by
-  # sysadmin-claude's 2026-10-16 audit, after test1's removal).
-  a2dissite "$CLIENT-le-ssl.conf" >/dev/null 2>&1 || true
-  rm -f "/etc/apache2/sites-available/$CLIENT.conf" "/etc/apache2/sites-available/$CLIENT-le-ssl.conf"
-  systemctl reload apache2 2>/dev/null || true
-  ok "$(msg remove_client.vhost_removed)"
+# certbot's apache plugin enables its own *-le-ssl.conf site alongside
+# the http one — clean each up INDEPENDENTLY of the other. A partial
+# earlier run can leave just one behind (found by sysadmin-claude's
+# 2026-10-16 audit: test1 had a dangling *-le-ssl.conf symlink because
+# the base .conf was already gone, and nesting this cleanup inside "if
+# the base .conf exists" meant it never ran).
+VHOST_CHANGED=0
+for V in "$CLIENT.conf" "$CLIENT-le-ssl.conf"; do
+  if [ -f "/etc/apache2/sites-available/$V" ] || [ -L "/etc/apache2/sites-enabled/$V" ]; then
+    a2dissite "$V" >/dev/null 2>&1 || true
+    rm -f "/etc/apache2/sites-available/$V" "/etc/apache2/sites-enabled/$V"
+    VHOST_CHANGED=1
+  fi
+done
+if [ "$VHOST_CHANGED" = "1" ]; then
+  if apache2ctl configtest 2>/dev/null; then
+    systemctl reload apache2 2>/dev/null || true
+    ok "$(msg remove_client.vhost_removed)"
+  else
+    warn "$(msg remove_client.configtest_failed)"
+  fi
 fi
 
 # --- 6b) Let's Encrypt certificate ---

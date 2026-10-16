@@ -168,40 +168,88 @@ docker logs --tail 50 claude-jmeno-klienta
 
 ### Zálohy a obnova
 
-Každý aktivní klient se zálohuje automaticky, jednou denně ve 3:00
-(`/etc/cron.d/n8n-mts-backup`, instalováno automaticky při založení
-prvního klienta — viz `ensure_backup_cron` v `lib.sh`). Záloha je dump
-databáze (`pg_dump`, gzip) + kopie `.env` (obsahuje
-`N8N_ENCRYPTION_KEY`, bez kterého nejdou dešifrovat credentials v
-dumpu), uloženo do `clients/{client}/backups/`; drží se posledních 7
-záloh na klienta (rotace).
+Každý aktivní klient (sloupec **Stav** v `clients.md` = `active`) se
+zálohuje automaticky, jednou denně ve 3:00 (`/etc/cron.d/n8n-mts-backup`,
+instalováno automaticky `deploy-ops.sh` i `new-client.sh` — viz
+`ensure_backup_cron` v `lib.sh`, takže se doinstaluje i na už běžícím
+serveru). Záloha je jeden archiv za běh,
+`clients/{client}/backups/{client}-{STAMP}.tar.gz`, s právy `600`
+(obsahuje hesla a šifrované credentials, nesmí být čitelný pro nikoho
+jiného):
+
+- `db.dump` — `pg_dump -Fc` (custom formát, obnovuje se přes `pg_restore`)
+- `files/` — kopie celého `clients/{client}/` mimo `backups/` samotné:
+  `.env` (`N8N_ENCRYPTION_KEY`), appky (`apps/*/code/`), compose soubory
+- `volumes/*.tar` — docker volumes klienta (`n8n-{client}-data`,
+  `claude-{client}-workspace`)
+- `MANIFEST` — co je uvnitř a odkdy
+
+Drží se posledních 14 archivů na klienta (rotace). Když záloha u
+kteréhokoliv klienta selže, skript to vypíše a skončí nenulovým kódem —
+najdeš to v `/var/log/n8n-mts-backup.log`.
 
 Ruční záloha kdykoliv:
 ```bash
-/opt/n8n-mts/scripts/backup-clients.sh                # všichni klienti
-/opt/n8n-mts/scripts/backup-clients.sh jmeno-klienta   # jen jeden
+/opt/n8n-mts/scripts/backup-clients.sh                # všichni aktivní klienti
+/opt/n8n-mts/scripts/backup-clients.sh jmeno-klienta   # jen jeden (i neaktivní)
 ```
 
-Obnova (otestuj si ji nanečisto, než ji budeš někdy potřebovat doopravdy):
+**Obnova nanečisto** (vyzkoušej si ji, než ji budeš někdy potřebovat doopravdy):
 ```bash
-# 1) rozbal nejnovější zálohu
-gunzip -k clients/jmeno-klienta/backups/NEJNOVEJSI.sql.gz
+cd /opt/n8n-mts/clients/jmeno-klienta/backups
+ARCHIVE=NEJNOVEJSI.tar.gz   # dosaď skutečný název souboru
+mkdir -p /tmp/restore-test && tar -xzf "$ARCHIVE" -C /tmp/restore-test
 
-# 2) nahraj do DOČASNÉ databáze (ne přímo do živé db_jmeno-klienta!)
+# DB do DOČASNÉ databáze (ne přímo do živé db_jmeno-klienta!)
 docker exec -i n8n-mts-postgres psql -U postgres -c "CREATE DATABASE restore_test;"
-docker exec -i n8n-mts-postgres psql -U postgres restore_test < clients/jmeno-klienta/backups/NEJNOVEJSI.sql
+docker exec -i n8n-mts-postgres pg_restore -U postgres -d restore_test < /tmp/restore-test/db.dump
 
-# 3) ověř, že se obsah nahrál (např. tabulka workflow_entity)
+# ověř, že se obsah nahrál
 docker exec -i n8n-mts-postgres psql -U postgres restore_test -c "SELECT count(*) FROM workflow_entity;"
 
-# 4) úklid testovací DB
+# úklid
 docker exec -i n8n-mts-postgres psql -U postgres -c "DROP DATABASE restore_test;"
+rm -rf /tmp/restore-test
 ```
 
-Pro skutečnou obnovu (po havárii) nahraď krok 2 cílem `db_jmeno-klienta`
-(klienta nejdřív zastav: `docker stop n8n-jmeno-klienta`), a do
-`clients/jmeno-klienta/.env` vrať `N8N_ENCRYPTION_KEY` z odpovídajícího
-`.env.bak` v `backups/`, pokud se liší od aktuálního.
+**Skutečná obnova existujícího klienta** (po havárii dat, klient v
+`clients.md` pořád je). DB se nenahrává do živé, naplněné databáze —
+plný dump nemá `--clean` a kolidoval by s objekty, co už tam jsou:
+```bash
+CLIENT=jmeno-klienta
+ARCHIVE=/opt/n8n-mts/clients/$CLIENT/backups/NEJNOVEJSI.tar.gz   # dosaď
+
+docker stop "n8n-$CLIENT" "claude-$CLIENT"
+mkdir -p "/tmp/restore-$CLIENT" && tar -xzf "$ARCHIVE" -C "/tmp/restore-$CLIENT"
+
+# DB: DROP + CREATE (ne nahrání do existující)
+docker exec -i n8n-mts-postgres psql -U postgres -c "DROP DATABASE IF EXISTS db_$CLIENT WITH (FORCE);"
+docker exec -i n8n-mts-postgres psql -U postgres -c "CREATE DATABASE db_$CLIENT OWNER u_$CLIENT;"
+docker exec -i n8n-mts-postgres psql -U postgres -c "REVOKE CONNECT ON DATABASE db_$CLIENT FROM PUBLIC;"
+docker exec -i n8n-mts-postgres psql -U postgres -c "GRANT CONNECT ON DATABASE db_$CLIENT TO u_$CLIENT;"
+docker exec -i n8n-mts-postgres pg_restore -U postgres -d "db_$CLIENT" < "/tmp/restore-$CLIENT/db.dump"
+
+# soubory (appky, .env) — porovnej s živými, než cokoliv přepíšeš
+diff -rq "/tmp/restore-$CLIENT/files/" "clients/$CLIENT/"
+cp -a "clients/$CLIENT" "/tmp/clients-$CLIENT-before-restore"   # pojistka
+cp -a "/tmp/restore-$CLIENT/files/." "clients/$CLIENT/"
+
+# volumes
+for V in "n8n-$CLIENT-data" "claude-$CLIENT-workspace"; do
+  [ -f "/tmp/restore-$CLIENT/volumes/$V.tar" ] || continue
+  docker run --rm -v "$V":/v -v "/tmp/restore-$CLIENT/volumes":/b:ro alpine \
+    sh -c "rm -rf /v/* && tar -C /v -xf /b/$V.tar"
+done
+
+docker start "n8n-$CLIENT" "claude-$CLIENT"
+rm -rf "/tmp/restore-$CLIENT"
+```
+
+**Úplná ztráta klienta** (síť, role, adresář — úplně vše pryč): nejdřív
+znovu spusť `scripts/new-client.sh jmeno-klienta`, ať vznikne čistý
+skeleton (síť, DB role, prázdná DB, kontejnery, vhost, certifikát), a
+teprve pak proveď postup výše pro "skutečnou obnovu existujícího
+klienta" — ten přepíše prázdnou DB a výchozí soubory obsahem ze zálohy.
 
 ### Zrušení klienta
 

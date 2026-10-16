@@ -7,6 +7,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/lib.sh"
 require_root
 ensure_dirs
+ensure_clients_md
+ensure_backup_cron
 
 MSG_CS[deploy_ops.building_ops]='Buildím n8n-mts/ops-claude:latest'
 MSG_EN[deploy_ops.building_ops]='Building n8n-mts/ops-claude:latest'

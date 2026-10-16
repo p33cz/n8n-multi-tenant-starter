@@ -179,41 +179,91 @@ docker logs --tail 50 claude-client-name
 
 ### Backups and restore
 
-Every active client is backed up automatically, once a day at 3:00 AM
-(`/etc/cron.d/n8n-mts-backup`, installed automatically when the first
-client is set up — see `ensure_backup_cron` in `lib.sh`). A backup is
-a database dump (`pg_dump`, gzip) + a copy of `.env` (holds
-`N8N_ENCRYPTION_KEY`, needed to decrypt credentials in that dump),
-stored in `clients/{client}/backups/`; the 7 most recent backups per
-client are kept (rotation).
+Every active client (**Stav**/Status column in `clients.md` = `active`)
+is backed up automatically, once a day at 3:00 AM
+(`/etc/cron.d/n8n-mts-backup`, installed automatically by both
+`deploy-ops.sh` and `new-client.sh` — see `ensure_backup_cron` in
+`lib.sh`, so it self-installs on an already-running server too). A
+backup is one archive per run,
+`clients/{client}/backups/{client}-{STAMP}.tar.gz`, mode `600` (it
+holds passwords and encrypted credentials, must not be readable by
+anyone else):
+
+- `db.dump` — `pg_dump -Fc` (custom format, restored with `pg_restore`)
+- `files/` — a copy of all of `clients/{client}/` except `backups/`
+  itself: `.env` (`N8N_ENCRYPTION_KEY`), apps (`apps/*/code/`), compose files
+- `volumes/*.tar` — the client's docker volumes (`n8n-{client}-data`,
+  `claude-{client}-workspace`)
+- `MANIFEST` — what's inside and from when
+
+The 14 most recent archives per client are kept (rotation). If any
+client's backup fails, the script says so and exits non-zero — check
+`/var/log/n8n-mts-backup.log`.
 
 Manual backup any time:
 ```bash
-/opt/n8n-mts/scripts/backup-clients.sh                 # every client
-/opt/n8n-mts/scripts/backup-clients.sh client-name      # just one
+/opt/n8n-mts/scripts/backup-clients.sh                 # every active client
+/opt/n8n-mts/scripts/backup-clients.sh client-name      # just one (even inactive)
 ```
 
-Restore (try it as a dry run before you ever need it for real):
+**Dry-run restore** (try it before you ever need it for real):
 ```bash
-# 1) unpack the most recent backup
-gunzip -k clients/client-name/backups/LATEST.sql.gz
+cd /opt/n8n-mts/clients/client-name/backups
+ARCHIVE=LATEST.tar.gz   # substitute the actual file name
+mkdir -p /tmp/restore-test && tar -xzf "$ARCHIVE" -C /tmp/restore-test
 
-# 2) load it into a TEMPORARY database (not straight into the live db_client-name!)
+# DB into a TEMPORARY database (not straight into the live db_client-name!)
 docker exec -i n8n-mts-postgres psql -U postgres -c "CREATE DATABASE restore_test;"
-docker exec -i n8n-mts-postgres psql -U postgres restore_test < clients/client-name/backups/LATEST.sql
+docker exec -i n8n-mts-postgres pg_restore -U postgres -d restore_test < /tmp/restore-test/db.dump
 
-# 3) verify the content loaded (e.g. the workflow_entity table)
+# verify the content loaded
 docker exec -i n8n-mts-postgres psql -U postgres restore_test -c "SELECT count(*) FROM workflow_entity;"
 
-# 4) clean up the test database
+# clean up
 docker exec -i n8n-mts-postgres psql -U postgres -c "DROP DATABASE restore_test;"
+rm -rf /tmp/restore-test
 ```
 
-For a real restore (after an incident), target `db_client-name`
-instead in step 2 (stop the client first: `docker stop
-n8n-client-name`), and restore `N8N_ENCRYPTION_KEY` in
-`clients/client-name/.env` from the matching `.env.bak` in
-`backups/`, if it differs from the current one.
+**Real restore of an existing client** (after a data incident, the
+client is still in `clients.md`). The DB is never loaded into the
+live, populated database — a full dump has no `--clean` and would
+collide with the objects already there:
+```bash
+CLIENT=client-name
+ARCHIVE=/opt/n8n-mts/clients/$CLIENT/backups/LATEST.tar.gz   # substitute
+
+docker stop "n8n-$CLIENT" "claude-$CLIENT"
+mkdir -p "/tmp/restore-$CLIENT" && tar -xzf "$ARCHIVE" -C "/tmp/restore-$CLIENT"
+
+# DB: DROP + CREATE (not loading into the existing one)
+docker exec -i n8n-mts-postgres psql -U postgres -c "DROP DATABASE IF EXISTS db_$CLIENT WITH (FORCE);"
+docker exec -i n8n-mts-postgres psql -U postgres -c "CREATE DATABASE db_$CLIENT OWNER u_$CLIENT;"
+docker exec -i n8n-mts-postgres psql -U postgres -c "REVOKE CONNECT ON DATABASE db_$CLIENT FROM PUBLIC;"
+docker exec -i n8n-mts-postgres psql -U postgres -c "GRANT CONNECT ON DATABASE db_$CLIENT TO u_$CLIENT;"
+docker exec -i n8n-mts-postgres pg_restore -U postgres -d "db_$CLIENT" < "/tmp/restore-$CLIENT/db.dump"
+
+# files (apps, .env) — diff against the live ones before overwriting anything
+diff -rq "/tmp/restore-$CLIENT/files/" "clients/$CLIENT/"
+cp -a "clients/$CLIENT" "/tmp/clients-$CLIENT-before-restore"   # safety net
+cp -a "/tmp/restore-$CLIENT/files/." "clients/$CLIENT/"
+
+# volumes
+for V in "n8n-$CLIENT-data" "claude-$CLIENT-workspace"; do
+  [ -f "/tmp/restore-$CLIENT/volumes/$V.tar" ] || continue
+  docker run --rm -v "$V":/v -v "/tmp/restore-$CLIENT/volumes":/b:ro alpine \
+    sh -c "rm -rf /v/* && tar -C /v -xf /b/$V.tar"
+done
+
+docker start "n8n-$CLIENT" "claude-$CLIENT"
+rm -rf "/tmp/restore-$CLIENT"
+```
+
+**Total loss of a client** (network, role, directory — everything
+gone): first run `scripts/new-client.sh client-name` again to recreate
+a clean skeleton (network, DB role, empty DB, containers, vhost,
+certificate), then follow the "real restore of an existing client"
+steps above — they'll overwrite the empty DB and default files with
+the backup's content.
 
 ### Removing a client
 

@@ -20,6 +20,8 @@ MSG_CS[remove_app.stopping]='Zastavuji a mažu kontejner appky'
 MSG_EN[remove_app.stopping]="Stopping and removing the app's container"
 MSG_CS[remove_app.vhost_removed]='Apache vhost odstraněn'
 MSG_EN[remove_app.vhost_removed]='Apache vhost removed'
+MSG_CS[remove_app.configtest_failed]='apache2ctl configtest selhal po úklidu vhostu — reload přeskočen, zkontroluj ručně'
+MSG_EN[remove_app.configtest_failed]='apache2ctl configtest failed after vhost cleanup — reload skipped, check manually'
 MSG_CS[remove_app.cert_removed]='Certifikát %s smazán (certbot delete)'
 MSG_EN[remove_app.cert_removed]='Certificate %s removed (certbot delete)'
 MSG_CS[remove_app.cert_remove_failed]='certbot delete pro %s selhalo — zkontroluj ručně (certbot certificates)'
@@ -54,13 +56,22 @@ fi
 docker rm -f "app-$CLIENT-$APPKA" >/dev/null 2>&1 || true
 
 # --- 3) Apache vhost ---
-if [ -f "/etc/apache2/sites-available/$CLIENT-$APPKA.conf" ]; then
-  a2dissite "$CLIENT-$APPKA.conf" >/dev/null 2>&1 || true
-  # same dangling-symlink issue as remove-client.sh — see the comment there.
-  a2dissite "$CLIENT-$APPKA-le-ssl.conf" >/dev/null 2>&1 || true
-  rm -f "/etc/apache2/sites-available/$CLIENT-$APPKA.conf" "/etc/apache2/sites-available/$CLIENT-$APPKA-le-ssl.conf"
-  systemctl reload apache2 2>/dev/null || true
-  ok "$(msg remove_app.vhost_removed)"
+# each file cleaned independently — see the comment in remove-client.sh.
+VHOST_CHANGED=0
+for V in "$CLIENT-$APPKA.conf" "$CLIENT-$APPKA-le-ssl.conf"; do
+  if [ -f "/etc/apache2/sites-available/$V" ] || [ -L "/etc/apache2/sites-enabled/$V" ]; then
+    a2dissite "$V" >/dev/null 2>&1 || true
+    rm -f "/etc/apache2/sites-available/$V" "/etc/apache2/sites-enabled/$V"
+    VHOST_CHANGED=1
+  fi
+done
+if [ "$VHOST_CHANGED" = "1" ]; then
+  if apache2ctl configtest 2>/dev/null; then
+    systemctl reload apache2 2>/dev/null || true
+    ok "$(msg remove_app.vhost_removed)"
+  else
+    warn "$(msg remove_app.configtest_failed)"
+  fi
 fi
 
 # --- 3b) Let's Encrypt certificate (lineage named after $CLIENT-$APPKA.$DOMAIN, see remove-client.sh) ---
