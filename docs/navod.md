@@ -166,6 +166,43 @@ docker logs --tail 50 n8n-jmeno-klienta
 docker logs --tail 50 claude-jmeno-klienta
 ```
 
+### Zálohy a obnova
+
+Každý aktivní klient se zálohuje automaticky, jednou denně ve 3:00
+(`/etc/cron.d/n8n-mts-backup`, instalováno automaticky při založení
+prvního klienta — viz `ensure_backup_cron` v `lib.sh`). Záloha je dump
+databáze (`pg_dump`, gzip) + kopie `.env` (obsahuje
+`N8N_ENCRYPTION_KEY`, bez kterého nejdou dešifrovat credentials v
+dumpu), uloženo do `clients/{client}/backups/`; drží se posledních 7
+záloh na klienta (rotace).
+
+Ruční záloha kdykoliv:
+```bash
+/opt/n8n-mts/scripts/backup-clients.sh                # všichni klienti
+/opt/n8n-mts/scripts/backup-clients.sh jmeno-klienta   # jen jeden
+```
+
+Obnova (otestuj si ji nanečisto, než ji budeš někdy potřebovat doopravdy):
+```bash
+# 1) rozbal nejnovější zálohu
+gunzip -k clients/jmeno-klienta/backups/NEJNOVEJSI.sql.gz
+
+# 2) nahraj do DOČASNÉ databáze (ne přímo do živé db_jmeno-klienta!)
+docker exec -i n8n-mts-postgres psql -U postgres -c "CREATE DATABASE restore_test;"
+docker exec -i n8n-mts-postgres psql -U postgres restore_test < clients/jmeno-klienta/backups/NEJNOVEJSI.sql
+
+# 3) ověř, že se obsah nahrál (např. tabulka workflow_entity)
+docker exec -i n8n-mts-postgres psql -U postgres restore_test -c "SELECT count(*) FROM workflow_entity;"
+
+# 4) úklid testovací DB
+docker exec -i n8n-mts-postgres psql -U postgres -c "DROP DATABASE restore_test;"
+```
+
+Pro skutečnou obnovu (po havárii) nahraď krok 2 cílem `db_jmeno-klienta`
+(klienta nejdřív zastav: `docker stop n8n-jmeno-klienta`), a do
+`clients/jmeno-klienta/.env` vrať `N8N_ENCRYPTION_KEY` z odpovídajícího
+`.env.bak` v `backups/`, pokud se liší od aktuálního.
+
 ### Zrušení klienta
 
 ```bash

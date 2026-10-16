@@ -3,7 +3,8 @@
 #   dumps the DB to the archive, moves usage.log to the archive (usage
 #   history is kept), stops+removes both containers, disconnects
 #   Postgres from the network, removes the network, drops the DB+user,
-#   removes the Apache vhost, drops the row from clients.md.
+#   removes the Apache vhost and its Let's Encrypt certificate, drops
+#   the row from clients.md.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/lib.sh"
@@ -31,8 +32,12 @@ MSG_CS[remove_client.drop_db_failed]='DROP DATABASE %s selhal'
 MSG_EN[remove_client.drop_db_failed]='DROP DATABASE %s failed'
 MSG_CS[remove_client.db_removed]='DB %s a uživatel %s smazáni'
 MSG_EN[remove_client.db_removed]='DB %s and user %s removed'
-MSG_CS[remove_client.vhost_removed]='Apache vhost odstraněn (certifikát v /etc/letsencrypt ponechán)'
-MSG_EN[remove_client.vhost_removed]='Apache vhost removed (certificate kept in /etc/letsencrypt)'
+MSG_CS[remove_client.vhost_removed]='Apache vhost odstraněn'
+MSG_EN[remove_client.vhost_removed]='Apache vhost removed'
+MSG_CS[remove_client.cert_removed]='Certifikát %s smazán (certbot delete)'
+MSG_EN[remove_client.cert_removed]='Certificate %s removed (certbot delete)'
+MSG_CS[remove_client.cert_remove_failed]='certbot delete pro %s selhalo — zkontroluj ručně (certbot certificates)'
+MSG_EN[remove_client.cert_remove_failed]='certbot delete for %s failed — check manually (certbot certificates)'
 MSG_CS[remove_client.done]="Klient '%s' zrušen. Archiv (DB dump + usage.log): %s"
 MSG_EN[remove_client.done]="Client '%s' removed. Archive (DB dump + usage.log): %s"
 
@@ -93,9 +98,27 @@ fi
 # --- 6) Apache vhost ---
 if [ -f "/etc/apache2/sites-available/$CLIENT.conf" ]; then
   a2dissite "$CLIENT.conf" >/dev/null 2>&1 || true
+  # certbot's apache plugin enables its own *-le-ssl.conf site alongside
+  # the http one above — dissite it too, or deleting its sites-available
+  # file below leaves a dangling symlink in sites-enabled/ (found by
+  # sysadmin-claude's 2026-10-16 audit, after test1's removal).
+  a2dissite "$CLIENT-le-ssl.conf" >/dev/null 2>&1 || true
   rm -f "/etc/apache2/sites-available/$CLIENT.conf" "/etc/apache2/sites-available/$CLIENT-le-ssl.conf"
   systemctl reload apache2 2>/dev/null || true
   ok "$(msg remove_client.vhost_removed)"
+fi
+
+# --- 6b) Let's Encrypt certificate ---
+# certbot was invoked with -d "$SUBDOMAIN" and no --cert-name, so the
+# lineage is named after the subdomain itself. Leaving it behind after
+# the vhost is gone makes its renewal fail (and clutters certbot renew
+# output for every other client too).
+if certbot certificates --cert-name "$CLIENT.$DOMAIN" 2>/dev/null | grep -q "Certificate Name"; then
+  if certbot delete --cert-name "$CLIENT.$DOMAIN" --non-interactive >/dev/null 2>&1; then
+    ok "$(msg remove_client.cert_removed "$CLIENT.$DOMAIN")"
+  else
+    warn "$(msg remove_client.cert_remove_failed "$CLIENT.$DOMAIN")"
+  fi
 fi
 
 # --- 7) drop from clients.md, archive the client directory ---

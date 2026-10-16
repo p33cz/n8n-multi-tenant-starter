@@ -86,6 +86,7 @@ validate_name "$CLIENT"
 ensure_dirs
 ensure_clients_md
 ensure_catchall_vhost
+ensure_backup_cron
 client_exists "$CLIENT" && die "$(msg new_client.already_exists "$CLIENT")"
 docker ps -a --format '{{.Names}}' | grep -qx "n8n-$CLIENT" && die "$(msg new_client.container_exists "$CLIENT")"
 

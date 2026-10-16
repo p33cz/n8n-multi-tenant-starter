@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # remove-app.sh <client> <app> — removes an app:
 #   backs up the app's code to the archive, stops+removes the
-#   container, removes the Apache vhost, drops it from apps.md.
+#   container, removes the Apache vhost and its Let's Encrypt
+#   certificate, drops it from apps.md.
 # Does NOT touch the client's own containers/network (n8n-{client},
 # claude-{client}, net-{client}) — that's remove-client.sh's job.
 set -euo pipefail
@@ -17,8 +18,12 @@ MSG_CS[remove_app.backing_up]='Zálohuji kód appky → %s'
 MSG_EN[remove_app.backing_up]="Backing up the app's code → %s"
 MSG_CS[remove_app.stopping]='Zastavuji a mažu kontejner appky'
 MSG_EN[remove_app.stopping]="Stopping and removing the app's container"
-MSG_CS[remove_app.vhost_removed]='Apache vhost odstraněn (certifikát v /etc/letsencrypt ponechán)'
-MSG_EN[remove_app.vhost_removed]='Apache vhost removed (certificate kept in /etc/letsencrypt)'
+MSG_CS[remove_app.vhost_removed]='Apache vhost odstraněn'
+MSG_EN[remove_app.vhost_removed]='Apache vhost removed'
+MSG_CS[remove_app.cert_removed]='Certifikát %s smazán (certbot delete)'
+MSG_EN[remove_app.cert_removed]='Certificate %s removed (certbot delete)'
+MSG_CS[remove_app.cert_remove_failed]='certbot delete pro %s selhalo — zkontroluj ručně (certbot certificates)'
+MSG_EN[remove_app.cert_remove_failed]='certbot delete for %s failed — check manually (certbot certificates)'
 MSG_CS[remove_app.done]="Appka '%s' (klient '%s') zrušena. Záloha kódu: %s"
 MSG_EN[remove_app.done]="App '%s' (client '%s') removed. Code backup: %s"
 
@@ -51,9 +56,20 @@ docker rm -f "app-$CLIENT-$APPKA" >/dev/null 2>&1 || true
 # --- 3) Apache vhost ---
 if [ -f "/etc/apache2/sites-available/$CLIENT-$APPKA.conf" ]; then
   a2dissite "$CLIENT-$APPKA.conf" >/dev/null 2>&1 || true
+  # same dangling-symlink issue as remove-client.sh — see the comment there.
+  a2dissite "$CLIENT-$APPKA-le-ssl.conf" >/dev/null 2>&1 || true
   rm -f "/etc/apache2/sites-available/$CLIENT-$APPKA.conf" "/etc/apache2/sites-available/$CLIENT-$APPKA-le-ssl.conf"
   systemctl reload apache2 2>/dev/null || true
   ok "$(msg remove_app.vhost_removed)"
+fi
+
+# --- 3b) Let's Encrypt certificate (lineage named after $CLIENT-$APPKA.$DOMAIN, see remove-client.sh) ---
+if certbot certificates --cert-name "$CLIENT-$APPKA.$DOMAIN" 2>/dev/null | grep -q "Certificate Name"; then
+  if certbot delete --cert-name "$CLIENT-$APPKA.$DOMAIN" --non-interactive >/dev/null 2>&1; then
+    ok "$(msg remove_app.cert_removed "$CLIENT-$APPKA.$DOMAIN")"
+  else
+    warn "$(msg remove_app.cert_remove_failed "$CLIENT-$APPKA.$DOMAIN")"
+  fi
 fi
 
 # --- 4) drop from apps.md, remove the app directory ---

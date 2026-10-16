@@ -177,6 +177,44 @@ docker logs --tail 50 n8n-client-name
 docker logs --tail 50 claude-client-name
 ```
 
+### Backups and restore
+
+Every active client is backed up automatically, once a day at 3:00 AM
+(`/etc/cron.d/n8n-mts-backup`, installed automatically when the first
+client is set up — see `ensure_backup_cron` in `lib.sh`). A backup is
+a database dump (`pg_dump`, gzip) + a copy of `.env` (holds
+`N8N_ENCRYPTION_KEY`, needed to decrypt credentials in that dump),
+stored in `clients/{client}/backups/`; the 7 most recent backups per
+client are kept (rotation).
+
+Manual backup any time:
+```bash
+/opt/n8n-mts/scripts/backup-clients.sh                 # every client
+/opt/n8n-mts/scripts/backup-clients.sh client-name      # just one
+```
+
+Restore (try it as a dry run before you ever need it for real):
+```bash
+# 1) unpack the most recent backup
+gunzip -k clients/client-name/backups/LATEST.sql.gz
+
+# 2) load it into a TEMPORARY database (not straight into the live db_client-name!)
+docker exec -i n8n-mts-postgres psql -U postgres -c "CREATE DATABASE restore_test;"
+docker exec -i n8n-mts-postgres psql -U postgres restore_test < clients/client-name/backups/LATEST.sql
+
+# 3) verify the content loaded (e.g. the workflow_entity table)
+docker exec -i n8n-mts-postgres psql -U postgres restore_test -c "SELECT count(*) FROM workflow_entity;"
+
+# 4) clean up the test database
+docker exec -i n8n-mts-postgres psql -U postgres -c "DROP DATABASE restore_test;"
+```
+
+For a real restore (after an incident), target `db_client-name`
+instead in step 2 (stop the client first: `docker stop
+n8n-client-name`), and restore `N8N_ENCRYPTION_KEY` in
+`clients/client-name/.env` from the matching `.env.bak` in
+`backups/`, if it differs from the current one.
+
 ### Removing a client
 
 ```bash

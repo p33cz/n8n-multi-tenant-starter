@@ -209,6 +209,21 @@ Pořadí sloupců je závazné (skripty ho parsují).
 MD
 }
 
+# Daily backup of every active client (DB dump + .env, see
+# backup-clients.sh) via a host cron.d entry. Idempotent — only writes
+# the file if it's missing or doesn't already reference the script, so
+# it self-heals on an already-running server too (found missing by
+# sysadmin-claude's 2026-10-16 audit: new clients never got scheduled
+# backups, only a one-off dump at removal time).
+ensure_backup_cron() {
+  local cron="/etc/cron.d/n8n-mts-backup"
+  if [ -f "$cron" ] && grep -qF "$ROOT/scripts/backup-clients.sh" "$cron" 2>/dev/null; then
+    return 0
+  fi
+  echo "0 3 * * * root $ROOT/scripts/backup-clients.sh >>/var/log/n8n-mts-backup.log 2>&1" > "$cron"
+  chmod 0644 "$cron"
+}
+
 # find a free app port from APP_PORT_BASE up (no collision with apps.md or listening ports)
 find_free_app_port() {
   local p="$APP_PORT_BASE"
