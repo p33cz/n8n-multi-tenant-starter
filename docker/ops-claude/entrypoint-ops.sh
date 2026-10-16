@@ -40,7 +40,10 @@ fi
 
 # remote-control retry loop. Remote Control refuses API-key auth, so
 # ANTHROPIC_API_KEY (still used by the rest of the container) is unset
-# here; the fixed --name keeps the session recognisable in claude.ai.
+# here; the fixed --name keeps the session recognisable in claude.ai and
+# --spawn skips the interactive spawn-mode question on first launch.
+# First run on a fresh volume still needs, once: `claude auth login`,
+# trusting /workspace, and answering "Enable Remote Control? y".
 cat > /usr/local/bin/rc-loop.sh <<RC
 #!/usr/bin/env bash
 export HOME=/root
@@ -49,7 +52,7 @@ unset ANTHROPIC_API_KEY
 cd /workspace || cd /root
 while true; do
   echo "[rc] \$(date -u +%FT%TZ) starting claude remote-control"
-  claude remote-control --name claude-code-n8n-mts 2>&1 || echo "[rc] remote-control exited (code \$?) — probably missing a claude.ai login (claude auth login)"
+  claude remote-control --name claude-code-n8n-mts --spawn=same-dir 2>&1 || echo "[rc] remote-control exited (code \$?) — probably missing a claude.ai login (claude auth login)"
   sleep 30
 done
 RC
