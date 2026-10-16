@@ -42,6 +42,13 @@ fi
 # ANTHROPIC_API_KEY (still used by the rest of the container) is unset
 # here; the fixed --name keeps the session recognisable in claude.ai and
 # --spawn skips the interactive spawn-mode question on first launch.
+# --continue reattaches the mobile app to the chat thread the previous
+# process in this directory had (works up to ~4h after that process
+# stopped) — without it, every container recreate (image rebuild,
+# `docker compose up --force-recreate`) looks like a brand new chat to
+# the person using it, even though CLAUDE_CONFIG_DIR already persists
+# the login and transcript history underneath. Harmless on a truly
+# first run: falls back to starting a fresh session.
 # First run on a fresh volume still needs, once: `claude auth login`,
 # trusting /workspace, and answering "Enable Remote Control? y".
 cat > /usr/local/bin/rc-loop.sh <<RC
@@ -52,7 +59,7 @@ unset ANTHROPIC_API_KEY
 cd /workspace || cd /root
 while true; do
   echo "[rc] \$(date -u +%FT%TZ) starting claude remote-control"
-  claude remote-control --name claude-code-n8n-mts --spawn=same-dir 2>&1 || echo "[rc] remote-control exited (code \$?) — probably missing a claude.ai login (claude auth login)"
+  claude remote-control --name claude-code-n8n-mts --spawn=same-dir --continue 2>&1 || echo "[rc] remote-control exited (code \$?) — probably missing a claude.ai login (claude auth login)"
   sleep 30
 done
 RC

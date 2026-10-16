@@ -82,12 +82,20 @@ service cron start 2>/dev/null || cron || true
 log 'cron spuštěn (hodinový usage-collect)' 'cron started (hourly usage-collect)'
 
 # --- 4) claude remote-control in a screen session (retry loop) ---
+# --continue reattaches the mobile app to the previous chat thread
+# instead of always looking like a new one (works up to ~4h after the
+# prior process stopped, harmless no-op otherwise — see
+# docker/ops-claude/entrypoint-ops.sh for the full writeup). Note:
+# unlike the ops container, this one's ~/.claude isn't on a named
+# volume, so --continue only helps across a plain container restart,
+# not a full recreate (image rebuild) — login/history don't survive
+# that here yet.
 cat > /usr/local/bin/rc-loop.sh <<'RC'
 #!/usr/bin/env bash
 export HOME=/root
 while true; do
   echo "[rc] $(date -u +%FT%TZ) starting claude remote-control"
-  claude remote-control 2>&1 || echo "[rc] remote-control exited (code $?) — probably missing a claude.ai login"
+  claude remote-control --continue 2>&1 || echo "[rc] remote-control exited (code $?) — probably missing a claude.ai login"
   sleep 30
 done
 RC
