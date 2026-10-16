@@ -30,10 +30,12 @@ services:
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       N8N_MTS_LANG: ${N8N_MTS_LANG:-cs}
+      CLAUDE_CONFIG_DIR: /root/.claude                # .claude.json lands here too
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock   # ONLY the ops layer has docker.sock
       - /opt/n8n-mts:/workspace                       # manages the whole stack
       - /opt/n8n-mts/claude-auth:/auth:ro             # shared claude.ai login
+      - ops-claude-home:/root/.claude                 # login + history survive recreation
     networks:
       - n8n-mts-net
 
@@ -44,3 +46,5 @@ networks:
 volumes:
   pgdata:
     name: n8n-mts-pgdata
+  ops-claude-home:
+    name: n8n-mts-ops-claude-home
