@@ -344,6 +344,20 @@ Apache má navíc catch-all vhost (`000-catchall`, zakládá si ho sám
 subdoménu spadl na první vhost v pořadí a ukázal cizí n8n s cizím
 certifikátem, místo aby vrátil 404.
 
+**Paměťové limity**: `n8n-{client}` (2 GB), `claude-{client}` a
+appky (512 MB–1 GB) mají v šablonách `mem_limit`, aby jeden klient
+(např. splihlý workflow) nemohl spotřebovat paměť celého serveru a
+shodit tím i ostatní. Postgres je sdílený mezi všemi klienty, proto
+limit záměrně nemá. Platí jen pro nově založené klienty/appky — u už
+běžících se projeví až po přegenerování `docker-compose.yml` a
+`docker compose up -d` (recreate).
+
+Volitelně, mimo tento repo (je to nastavení Docker daemona, ne
+projektu): `"live-restore": true` v `/etc/docker/daemon.json` umožní
+kontejnerům přežít restart/upgrade samotného `dockerd` (např. při
+`apt upgrade` balíčku `docker-ce`) — bez toho restart Dockeru
+restartuje všechny kontejnery najednou.
+
 **Appky**: appka může uvnitř mít víc "webů" jako podsložky a některé
 z nich si tam mohou ukládat podpůrná data (nastavení, hashovaná
 hesla) — ta data jsou fyzicky ve stejném adresáři, co appka servíruje

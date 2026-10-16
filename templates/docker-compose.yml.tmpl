@@ -10,6 +10,12 @@ services:
     image: n8nio/n8n:latest
     container_name: n8n-${CLIENT}
     restart: unless-stopped
+    # Caps one client's memory use so it can't take down the whole
+    # server (e.g. a runaway workflow) — found worth having after a
+    # 2026-10-16 audit traced an unrelated container restart, even
+    # though that particular incident wasn't OOM. Postgres (shared
+    # across all clients) is deliberately left unlimited.
+    mem_limit: 2g
     env_file:
       - ./.env
     environment:
@@ -42,6 +48,7 @@ services:
     image: n8n-mts/claude-agent:latest
     container_name: claude-${CLIENT}
     restart: unless-stopped
+    mem_limit: 1g
     # NO docker.sock, NO public port. Only network net-${CLIENT}.
     environment:
       CLIENT: ${CLIENT}

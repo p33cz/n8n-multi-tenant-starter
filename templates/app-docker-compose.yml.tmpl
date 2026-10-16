@@ -10,6 +10,7 @@ services:
     image: n8n-mts/app-runtime:latest
     container_name: app-${CLIENT}-${APPKA}
     restart: unless-stopped
+    mem_limit: 512m
     # NO docker.sock. The app's code is shared with claude-${CLIENT} via a
     # bind mount (it has ./apps:/apps — this app lives inside at /apps/${APPKA}/code).
     env_file:

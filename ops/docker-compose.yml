@@ -26,6 +26,7 @@ services:
     image: n8n-mts/ops-claude:latest
     container_name: claude-code-n8n-mts
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       N8N_MTS_LANG: ${N8N_MTS_LANG:-cs}

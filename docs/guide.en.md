@@ -367,6 +367,21 @@ nonexistent subdomain would fall through to the first vhost in order
 and show someone else's n8n with someone else's certificate, instead
 of returning a 404.
 
+**Memory limits**: `n8n-{client}` (2 GB), `claude-{client}` and apps
+(512 MB–1 GB) carry a `mem_limit` in the templates, so one client
+(e.g. a runaway workflow) can't exhaust the whole server's memory and
+take everyone else down with it. Postgres is shared across every
+client, so it's deliberately left unlimited. This only applies to
+newly created clients/apps — an already-running one only picks it up
+after its `docker-compose.yml` is regenerated and recreated
+(`docker compose up -d`).
+
+Optionally, outside this repo (it's a Docker daemon setting, not a
+project one): `"live-restore": true` in `/etc/docker/daemon.json`
+lets containers survive a restart/upgrade of `dockerd` itself (e.g.
+an `apt upgrade` of the `docker-ce` package) — without it, restarting
+Docker restarts every container at once.
+
 **Apps**: an app can internally have several "sites" as
 subdirectories, and some of them may store supporting data there
 (settings, hashed passwords) — that data physically sits in the same
