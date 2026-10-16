@@ -196,13 +196,15 @@ Ruční záloha kdykoliv:
 
 **Obnova nanečisto** (vyzkoušej si ji, než ji budeš někdy potřebovat doopravdy):
 ```bash
-cd /opt/n8n-mts/clients/jmeno-klienta/backups
+CLIENT=jmeno-klienta
+cd "/opt/n8n-mts/clients/$CLIENT/backups"
 ARCHIVE=NEJNOVEJSI.tar.gz   # dosaď skutečný název souboru
 mkdir -p /tmp/restore-test && tar -xzf "$ARCHIVE" -C /tmp/restore-test
 
 # DB do DOČASNÉ databáze (ne přímo do živé db_jmeno-klienta!)
 docker exec -i n8n-mts-postgres psql -U postgres -c "CREATE DATABASE restore_test;"
-docker exec -i n8n-mts-postgres pg_restore -U postgres -d restore_test < /tmp/restore-test/db.dump
+docker exec -i n8n-mts-postgres pg_restore -U postgres -d restore_test \
+  --no-owner --role="u_$CLIENT" --exit-on-error < /tmp/restore-test/db.dump
 
 # ověř, že se obsah nahrál
 docker exec -i n8n-mts-postgres psql -U postgres restore_test -c "SELECT count(*) FROM workflow_entity;"
@@ -227,7 +229,8 @@ docker exec -i n8n-mts-postgres psql -U postgres -c "DROP DATABASE IF EXISTS db_
 docker exec -i n8n-mts-postgres psql -U postgres -c "CREATE DATABASE db_$CLIENT OWNER u_$CLIENT;"
 docker exec -i n8n-mts-postgres psql -U postgres -c "REVOKE CONNECT ON DATABASE db_$CLIENT FROM PUBLIC;"
 docker exec -i n8n-mts-postgres psql -U postgres -c "GRANT CONNECT ON DATABASE db_$CLIENT TO u_$CLIENT;"
-docker exec -i n8n-mts-postgres pg_restore -U postgres -d "db_$CLIENT" < "/tmp/restore-$CLIENT/db.dump"
+docker exec -i n8n-mts-postgres pg_restore -U postgres -d "db_$CLIENT" \
+  --no-owner --role="u_$CLIENT" --exit-on-error < "/tmp/restore-$CLIENT/db.dump"
 
 # soubory (appky, .env) — porovnej s živými, než cokoliv přepíšeš
 diff -rq "/tmp/restore-$CLIENT/files/" "clients/$CLIENT/"

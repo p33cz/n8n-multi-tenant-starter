@@ -208,13 +208,15 @@ Manual backup any time:
 
 **Dry-run restore** (try it before you ever need it for real):
 ```bash
-cd /opt/n8n-mts/clients/client-name/backups
+CLIENT=client-name
+cd "/opt/n8n-mts/clients/$CLIENT/backups"
 ARCHIVE=LATEST.tar.gz   # substitute the actual file name
 mkdir -p /tmp/restore-test && tar -xzf "$ARCHIVE" -C /tmp/restore-test
 
 # DB into a TEMPORARY database (not straight into the live db_client-name!)
 docker exec -i n8n-mts-postgres psql -U postgres -c "CREATE DATABASE restore_test;"
-docker exec -i n8n-mts-postgres pg_restore -U postgres -d restore_test < /tmp/restore-test/db.dump
+docker exec -i n8n-mts-postgres pg_restore -U postgres -d restore_test \
+  --no-owner --role="u_$CLIENT" --exit-on-error < /tmp/restore-test/db.dump
 
 # verify the content loaded
 docker exec -i n8n-mts-postgres psql -U postgres restore_test -c "SELECT count(*) FROM workflow_entity;"
@@ -240,7 +242,8 @@ docker exec -i n8n-mts-postgres psql -U postgres -c "DROP DATABASE IF EXISTS db_
 docker exec -i n8n-mts-postgres psql -U postgres -c "CREATE DATABASE db_$CLIENT OWNER u_$CLIENT;"
 docker exec -i n8n-mts-postgres psql -U postgres -c "REVOKE CONNECT ON DATABASE db_$CLIENT FROM PUBLIC;"
 docker exec -i n8n-mts-postgres psql -U postgres -c "GRANT CONNECT ON DATABASE db_$CLIENT TO u_$CLIENT;"
-docker exec -i n8n-mts-postgres pg_restore -U postgres -d "db_$CLIENT" < "/tmp/restore-$CLIENT/db.dump"
+docker exec -i n8n-mts-postgres pg_restore -U postgres -d "db_$CLIENT" \
+  --no-owner --role="u_$CLIENT" --exit-on-error < "/tmp/restore-$CLIENT/db.dump"
 
 # files (apps, .env) — diff against the live ones before overwriting anything
 diff -rq "/tmp/restore-$CLIENT/files/" "clients/$CLIENT/"
