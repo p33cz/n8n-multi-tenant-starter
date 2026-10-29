@@ -1,11 +1,24 @@
 # Apache vhost for n8n-${CLIENT}. Exposes ONLY the n8n editor (port
 # ${N8N_PORT} on loopback). claude-${CLIENT} has no public port.
 # certbot --apache generates a :443 variant (le-ssl.conf) from this vhost.
+# HTTP/2: the "Protocols h2 http/1.1" line below is the one certbot
+# copies into the :443 vhost, which is where it takes effect — h2 needs
+# TLS ALPN, so on :80 it is inert (h2c is deliberately NOT listed).
+# After certbot, new-client.sh additionally calls ensure_vhost_http2 on
+# the generated le-ssl.conf, so an existing or hand-edited :443 vhost
+# keeps the line too. NEVER run `a2enmod http2` — see ensure_vhost_http2
+# in scripts/lib.sh for why h2 is per-vhost here. The websocket rules
+# below are unaffected: for the Upgrade handshake a browser opens its
+# own HTTP/1.1 connection.
 # We handle the redirect to HTTPS ourselves via an "HTTPS off" condition —
 # that stays safe even after being copied into the :443 vhost (there
 # HTTPS is on → the redirect doesn't fire, no loop).
 <VirtualHost *:80>
     ServerName ${SUBDOMAIN}
+    # see the HTTP/2 note at the top of this template
+    <IfModule http2_module>
+        Protocols h2 http/1.1
+    </IfModule>
 
     RewriteEngine On
 

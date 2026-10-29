@@ -220,6 +220,12 @@ PHASE 3 — Postgres
 PHASE 4 — Apache2 as a reverse proxy
 - install apache2 and certbot (python3-certbot-apache) if missing
 - enable modules: proxy proxy_http proxy_wstunnel rewrite ssl headers
+- for HTTP/2, load ONLY the module itself (symlink
+  mods-enabled/http2.load); do NOT run `a2enmod http2`, which also
+  enables mods-available/http2.conf with a global "Protocols h2 h2c
+  http/1.1" and would switch h2 on for every vhost on the server,
+  including any not managed by this layer — h2 is enabled per vhost,
+  in the :443 vhost template (needs MPM event + PHP via PHP-FPM)
 - handle the HTTP→HTTPS redirect directly in the vhost template
   (RewriteCond %{HTTPS} off + RewriteRule), NOT via certbot
   --redirect — so when issuing/renewing a certificate, use \`certbot

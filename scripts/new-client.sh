@@ -197,6 +197,9 @@ if certbot --apache -d "$SUBDOMAIN" --non-interactive --agree-tos \
       -m "$CERTBOT_EMAIL" --no-redirect >/tmp/certbot-$CLIENT.log 2>&1; then
   ok "$(msg new_client.cert_issued)"
   CERT_OK=1
+  # h2 in the :443 vhost certbot just generated (never a2enmod http2 —
+  # see ensure_vhost_http2 in lib.sh for why it is per-vhost)
+  ensure_vhost_http2 "/etc/apache2/sites-available/$CLIENT-le-ssl.conf"
 else
   warn "$(msg new_client.certbot_failed "$SUBDOMAIN")"
   warn "$(msg new_client.certbot_check_dns "$SUBDOMAIN")"

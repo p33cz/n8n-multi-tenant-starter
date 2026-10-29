@@ -371,6 +371,23 @@ nonexistent subdomain would fall through to the first vhost in order
 and show someone else's n8n with someone else's certificate, instead
 of returning a 404.
 
+**HTTP/2**: a client's and an app's `:443` vhost carry
+`Protocols h2 http/1.1` right under `ServerName` —
+the line lives in the vhost template, so certbot copies it into the
+`*-le-ssl.conf` it generates, and right after certbot
+`new-client.sh`/`new-app.sh` also run `ensure_vhost_http2` (`lib.sh`)
+on that file as a backstop — it is therefore there even if a vhost is
+regenerated or hand-edited, and it is never added twice. Never run `a2enmod http2`: besides the module, that enables
+`mods-enabled/http2.conf` with a global `Protocols h2 h2c http/1.1`,
+turning h2 on for *every* vhost on the server, including any this
+layer doesn't manage — and because `Protocols` directives add up, a
+global line can't be turned back off per vhost. Only the `http2.load`
+symlink belongs in `mods-enabled`. Prerequisites: MPM `event` (not
+`prefork`) and PHP through PHP-FPM. The catch-all vhost stays on
+HTTP/1.1 — it only ever returns 404. The n8n editor's live push is
+unaffected: for the websocket Upgrade a browser opens its own
+HTTP/1.1 connection.
+
 **Memory limits**: `n8n-{client}` (2 GB), `claude-{client}` and apps
 (512 MB–1 GB) carry a `mem_limit` in the templates, so one client
 (e.g. a runaway workflow) can't exhaust the whole server's memory and

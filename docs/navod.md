@@ -349,6 +349,21 @@ Apache má navíc catch-all vhost (`000-catchall`, zakládá si ho sám
 subdoménu spadl na první vhost v pořadí a ukázal cizí n8n s cizím
 certifikátem, místo aby vrátil 404.
 
+**HTTP/2**: `:443` vhosty klientů i appek mají hned pod
+`ServerName` řádek `Protocols h2 http/1.1` — je v šabloně vhostu, takže ho certbot
+zkopíruje do `*-le-ssl.conf`, a hned po certbotu ho `new-client.sh`/`new-app.sh`
+ještě pojistí přes `ensure_vhost_http2` (`lib.sh`). Je tam tedy i po
+přegenerování nebo ruční editaci vhostu, a nikdy se nepřidá dvakrát.
+Nikdy nespouštěj `a2enmod http2`: kromě modulu zapne i
+`mods-enabled/http2.conf` s globálním `Protocols h2 h2c http/1.1`, což
+zapne h2 *všem* vhostům na serveru včetně těch, které tato vrstva
+nespravuje — a protože se direktivy `Protocols` sčítají, globální řádek
+už nejde po vhostech vypnout. Do `mods-enabled` patří jen symlink
+`http2.load`. Předpoklady: MPM `event` (ne `prefork`) a PHP přes
+PHP-FPM. Catch-all vhost zůstává na HTTP/1.1 — vrací jen 404. Živý
+push v n8n editoru to neovlivní: na websocketový Upgrade si prohlížeč
+otevře vlastní HTTP/1.1 spojení.
+
 **Paměťové limity**: `n8n-{client}` (2 GB), `claude-{client}` a
 appky (512 MB–1 GB) mají v šablonách `mem_limit`, aby jeden klient
 (např. splihlý workflow) nemohl spotřebovat paměť celého serveru a

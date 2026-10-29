@@ -155,6 +155,8 @@ if certbot --apache -d "$APP_SUBDOMAIN" --non-interactive --agree-tos \
       -m "$CERTBOT_EMAIL" --no-redirect >/tmp/certbot-$CLIENT-$APPKA.log 2>&1; then
   ok "$(msg new_app.cert_issued)"
   CERT_OK=1
+  # h2 in the :443 vhost certbot just generated (see new-client.sh / lib.sh)
+  ensure_vhost_http2 "/etc/apache2/sites-available/$CLIENT-$APPKA-le-ssl.conf"
 else
   warn "$(msg new_app.certbot_failed "$APP_SUBDOMAIN")"
   warn "$(msg new_app.certbot_detail "$CLIENT" "$APPKA")"

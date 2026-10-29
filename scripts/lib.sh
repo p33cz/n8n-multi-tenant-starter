@@ -78,6 +78,14 @@ MSG_CS[lib.building_image.first]='poprvé'
 MSG_EN[lib.building_image.first]='first time'
 MSG_CS[lib.image_built]='Image %s:latest postaven'
 MSG_EN[lib.image_built]='Image %s:latest built'
+MSG_CS[lib.http2_enabled]='HTTP/2 zapnuto ve vhostu %s'
+MSG_EN[lib.http2_enabled]='HTTP/2 enabled in vhost %s'
+MSG_CS[lib.http2_module_missing]='mod_http2 není načtený — HTTP/2 pro %s přeskakuji. Načti SAMOTNÝ modul (ln -s ../mods-available/http2.load /etc/apache2/mods-enabled/http2.load), NE a2enmod http2 — ten přidá i http2.conf a zapne h2 i webům mimo tuto vrstvu.'
+MSG_EN[lib.http2_module_missing]='mod_http2 is not loaded — skipping HTTP/2 for %s. Load the module ITSELF (ln -s ../mods-available/http2.load /etc/apache2/mods-enabled/http2.load), NOT a2enmod http2 — that also adds http2.conf and turns h2 on for sites this layer does not manage.'
+MSG_CS[lib.http2_no_servername]='Ve vhostu %s není ServerName — HTTP/2 nezapnuto, přidej "Protocols h2 http/1.1" ručně.'
+MSG_EN[lib.http2_no_servername]='No ServerName in vhost %s — HTTP/2 not enabled, add "Protocols h2 http/1.1" manually.'
+MSG_CS[lib.http2_configtest_failed]='apache2ctl configtest po zapnutí HTTP/2 selhal — vracím %s ze zálohy, HTTP/2 nezapnuto.'
+MSG_EN[lib.http2_configtest_failed]='apache2ctl configtest failed after enabling HTTP/2 — restoring %s from backup, HTTP/2 not enabled.'
 
 require_root() { [ "$(id -u)" -eq 0 ] || die "$(msg lib.require_root)"; }
 
@@ -171,6 +179,59 @@ EOF
   fi
   a2ensite 000-catchall >/dev/null 2>&1
   apache2ctl configtest 2>/dev/null && systemctl reload apache2 2>/dev/null || true
+}
+
+# HTTP/2 for ONE of our own :443 vhosts (the *-le-ssl.conf that
+# certbot generates). Called right after certbot, so every new client
+# and app gets h2 without anyone remembering to add it.
+#
+# Why not mod_http2's own global config: mods-available/http2.conf
+# carries "Protocols h2 h2c http/1.1", which turns h2 on for EVERY
+# vhost on the server — including vhosts this layer doesn't manage.
+# Protocols directives ADD UP, so a global line can't be overridden
+# back off per vhost. Therefore: NEVER run `a2enmod http2` (it enables
+# both http2.load and http2.conf) — only the .load symlink belongs
+# here, and h2 is switched on per vhost, by us, in our files only.
+#
+# Idempotent: a vhost that already has a Protocols line is left
+# untouched, so this is safe to re-run and also retrofits vhosts
+# created before h2 was a thing here. Fail-safe: if configtest doesn't
+# like the result, the original file is put back and provisioning
+# carries on over HTTP/1.1 rather than leaving Apache unreloadable.
+ensure_vhost_http2() {
+  local vhost="$1"
+  [ -f "$vhost" ] || return 0
+  grep -qE '^[[:space:]]*Protocols[[:space:]]' "$vhost" && return 0
+  if ! apache2ctl -M 2>/dev/null | grep -q 'http2_module'; then
+    warn "$(msg lib.http2_module_missing "$(basename "$vhost")")"
+    return 0
+  fi
+
+  local backup="$vhost.pre-http2"
+  cp -p "$vhost" "$backup"
+  # insert "Protocols h2 http/1.1" right below the first ServerName,
+  # at the same indentation; everything else stays byte-identical
+  awk '!ins && /^[[:space:]]*ServerName[[:space:]]/ {
+         match($0, /^[[:space:]]*/)
+         print
+         print substr($0, 1, RLENGTH) "Protocols h2 http/1.1"
+         ins = 1
+         next
+       } { print }' "$backup" > "$vhost"
+
+  if ! grep -qE '^[[:space:]]*Protocols h2 http/1\.1$' "$vhost"; then
+    cp -p "$backup" "$vhost"; rm -f "$backup"
+    warn "$(msg lib.http2_no_servername "$(basename "$vhost")")"
+    return 0
+  fi
+  if ! apache2ctl configtest >/dev/null 2>&1; then
+    cp -p "$backup" "$vhost"; rm -f "$backup"
+    warn "$(msg lib.http2_configtest_failed "$(basename "$vhost")")"
+    return 0
+  fi
+  rm -f "$backup"
+  systemctl reload apache2 2>/dev/null || true
+  ok "$(msg lib.http2_enabled "$(basename "$vhost")")"
 }
 
 # clients.md/apps.md are the live record of a specific deployment
