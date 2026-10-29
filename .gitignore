@@ -28,3 +28,13 @@ apps.md
 # for anyone starting work on this repo) — it pulls in OPS.md itself via
 # the @OPS.md line, if it exists on a given deployment.
 OPS.md
+
+# archive of removed clients/apps (DB dumps, .env.bak with passwords and
+# encryption keys, usage history) — created by remove-client.sh /
+# remove-app.sh at runtime. Note: the *.env rule above does NOT cover
+# .env.bak, hence the whole directory.
+archive/
+
+# shared claude.ai login for remote-control (.credentials.json), mounted
+# read-only into every claude-{client} and into the ops container
+claude-auth/
