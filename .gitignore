@@ -38,3 +38,10 @@ archive/
 # shared claude.ai login for remote-control (.credentials.json), mounted
 # read-only into every claude-{client} and into the ops container
 claude-auth/
+
+# local Claude Code settings for one machine (permission allowlist with
+# paths of a specific deployment). Only the *.local.json files — a
+# project-wide .claude/settings.json can still be committed if it is
+# ever worth sharing.
+.claude/settings.local.json
+.claude/*.local.json
