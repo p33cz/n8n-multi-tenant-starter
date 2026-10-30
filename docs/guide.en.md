@@ -382,9 +382,13 @@ regenerated or hand-edited, and it is never added twice. Never run `a2enmod http
 turning h2 on for *every* vhost on the server, including any this
 layer doesn't manage — and because `Protocols` directives add up, a
 global line can't be turned back off per vhost. Only the `http2.load`
-symlink belongs in `mods-enabled`. Prerequisites: MPM `event` (not
-`prefork`) and PHP through PHP-FPM. The catch-all vhost stays on
-HTTP/1.1 — it only ever returns 404. The n8n editor's live push is
+symlink belongs in `mods-enabled`. Prerequisite: MPM `event` (not
+`prefork`) — that's the default MPM on a fresh Apache install, and
+nothing in this layer disturbs it (the host Apache never serves PHP
+itself, apps are proxied from their own container; `prefork` would
+only be forced by loading `mod_php` on the host, which never happens
+here). The catch-all vhost stays on HTTP/1.1 — it only ever returns
+404. The n8n editor's live push is
 unaffected: for the websocket Upgrade a browser opens its own
 HTTP/1.1 connection.
 

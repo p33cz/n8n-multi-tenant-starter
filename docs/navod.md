@@ -359,8 +359,12 @@ Nikdy nespouštěj `a2enmod http2`: kromě modulu zapne i
 zapne h2 *všem* vhostům na serveru včetně těch, které tato vrstva
 nespravuje — a protože se direktivy `Protocols` sčítají, globální řádek
 už nejde po vhostech vypnout. Do `mods-enabled` patří jen symlink
-`http2.load`. Předpoklady: MPM `event` (ne `prefork`) a PHP přes
-PHP-FPM. Catch-all vhost zůstává na HTTP/1.1 — vrací jen 404. Živý
+`http2.load`. Předpoklad: MPM `event` (ne `prefork`) — to je výchozí
+MPM na čerstvé instalaci Apache a tahle vrstva ho ničím nenarušuje
+(hostitelská Apache sama PHP neservíruje, appky jen proxuje do jejich
+vlastního kontejneru — `prefork` by si vynutil jedině `mod_php` přímo
+na hostu, a ten se tu nikde nenačítá). Catch-all vhost zůstává na
+HTTP/1.1 — vrací jen 404. Živý
 push v n8n editoru to neovlivní: na websocketový Upgrade si prohlížeč
 otevře vlastní HTTP/1.1 spojení.
 
